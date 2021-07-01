@@ -65,7 +65,7 @@ watchdog = PrivacyWatchdog(
     fallback_to_rdp=False,
 )
 
-# BatchNorm Layers must have track_running_stats turned off
+# BatchNorm to GroupNorm
 surgeon = ModelSurgeon(SurgicalProcedures.BN_to_GN)
 model = surgeon.operate(SimpleNet()) 
 

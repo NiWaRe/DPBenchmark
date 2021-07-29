@@ -1,11 +1,26 @@
 # in the subclasses only args can be defined that are also 
 # specified as args in the respective classes passed in to the
 # LightningCLI_Custom. (for the trainer by default: class Trainer)
-seed_everything: null
+seed_everything: 123
 trainer:
-  logger: true
+  # simply replace everything with a bool 'true' to use TensorBoard
+  logger: 
+    class_path: pytorch_lightning.loggers.WandbLogger
+    init_args:
+      project: 'dp_performances'
+      name: 'resnet18_cifar10_dp'
+      log_model: true
   checkpoint_callback: true
-  callbacks: null
+  callbacks: 
+    - class_path: pytorch_lightning.callbacks.ModelCheckpoint
+      init_args:
+        monitor: 'val_loss'
+    - class_path: pytorch_lightning.callbacks.EarlyStopping
+      init_args:
+        patience: 5
+    - class_path: pytorch_lightning.callbacks.LearningRateMonitor
+      init_args:
+        logging_interval: 'step'
   default_root_dir: null
   gradient_clip_val: 0.0
   gradient_clip_algorithm: norm
@@ -22,7 +37,7 @@ trainer:
   check_val_every_n_epoch: 1
   fast_dev_run: false
   accumulate_grad_batches: 1
-  max_epochs: null
+  max_epochs: 100
   min_epochs: null
   max_steps: null
   min_steps: null
@@ -44,7 +59,7 @@ trainer:
   resume_from_checkpoint: null
   profiler: null
   benchmark: false
-  deterministic: false
+  deterministic: true
   reload_dataloaders_every_epoch: false
   auto_lr_find: false
   replace_sampler_ddp: true
@@ -60,7 +75,9 @@ trainer:
   stochastic_weight_avg: false
 model:
   # possible models: resnet18
-  name: 'resnet18'
+  model_name: 'resnet18'
+  # possible datasets: cifar10, fashion_mnist, imagenet, mnist
+  data_name: 'cifar10'
   lr: 0.05
   # DP params
   # under model because I didn't want to overwrite the trainer class 
@@ -81,7 +98,7 @@ data:
   val_split: 0.2
   num_workers: 16
   normalize: false
-  batch_size: 32
+  batch_size: 128
   seed: 42
   shuffle: false
   pin_memory: false

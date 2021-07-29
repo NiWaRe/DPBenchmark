@@ -2,7 +2,8 @@
 from mmap import MAP_EXECUTABLE
 import os
 import yaml
-from typing import List
+from argparse import Namespace
+from typing import Union, Any, Dict
 
 # general ml
 import torch
@@ -12,9 +13,10 @@ import pytorch_lightning as pl
 
 # pytorch lightning
 from pytorch_lightning import LightningModule, seed_everything, Trainer
+from pytorch_lightning.utilities.cli import LightningCLI, LightningArgumentParser
+from pytorch_lightning.callbacks import Callback
 from torch.optim.lr_scheduler import OneCycleLR
 from torch.optim.swa_utils import AveragedModel, update_bn
-from pytorch_lightning.utilities.cli import LightningCLI
 
 # data
 from data import LitDataModuleDP, CIFAR10DataModule, CIFAR10DataModuleDP
@@ -23,6 +25,7 @@ from data import LitDataModuleDP, CIFAR10DataModule, CIFAR10DataModuleDP
 from models import get_model
 
 # metrics & logging
+from wandb import Artifact
 from pytorch_lightning.loggers import WandbLogger, wandb
 from pytorch_lightning.callbacks import LearningRateMonitor
 from pytorch_lightning.loggers import TensorBoardLogger
@@ -33,10 +36,12 @@ from pytorch_lightning.callbacks import ModelCheckpoint, model_checkpoint
 from deepee import (PrivacyWrapper, PrivacyWatchdog, UniformDataLoader,
                      ModelSurgeon, SurgicalProcedures, watchdog)
 
+### MODEL ###
 class LitModelDP(LightningModule):
     def __init__(
         self, 
-        name: str = "resnet18",
+        model_name: str = "resnet18",
+        data_name: str = "cifar10",
         pretrained: bool = False,
         num_classes: int = 10,
         lr: float = 0.05, 
@@ -53,7 +58,9 @@ class LitModelDP(LightningModule):
         Wrapper Module to extend normal models defined in models.py to DP
 
         Args:
-            name: selection of the model
+            model_name: selection of the model
+            data_name: also pass in what data to train on to possibly adapt model 
+                       and to also save data as part of hparams for wandb.
             pretrained: pertrained or not
             num_classes: number of classes
             lr: init learning rate for optimizer
@@ -68,35 +75,11 @@ class LitModelDP(LightningModule):
         # save all arguments to this model to self.hparams (also saved in logs)
         self.save_hyperparameters()
        
-       # TODO: can be flexibly plugged in in models.
         # select standard torchvision model
-        self.model = get_model(name, pretrained, num_classes)
+        self.model = get_model(model_name, pretrained, num_classes)
        
         # DeePee: model init.
         if self.hparams.dp:
-            # create deepee watchdog to be used in model instantiation
-            # self.watchdog = PrivacyWatchdog(
-            #     # possible because before trainer.fit() calls self._run(model) 
-            #     # the datamodule is attached
-            #     self.trainer.datamodule.train_dataloader(),
-            #     target_epsilon=10.0,
-            #     abort=False,
-            #     target_delta=1e-5,
-            #     fallback_to_rdp=False,
-            # )
-
-            # # BatchNorm to GroupNorm
-            # surgeon = ModelSurgeon(SurgicalProcedures.BN_to_BN_nostats)
-            # self.model = surgeon.operate(self.model) 
-            # self.model = PrivacyWrapper(
-            #     self.model, 
-            #     batch_size=self.hparams.batch_size, 
-            #     L2_clip=1.0, 
-            #     noise_multipler=1.0, 
-            #     # we define self.watchdog in LightningCLI.before_fit()
-            #     watchdog=self.watchdog,
-            # )
-
             # DeePee: disable automatic optimization, to be able to add noise
             self.automatic_optimization = False
 
@@ -148,7 +131,6 @@ class LitModelDP(LightningModule):
     def configure_optimizers(self):
         # DeePee: we want params from wrapped mdoel
         # self.paramters() -> self.model.wrapped_model.parameters()
-        # NOTE: check if self.wrapped_model.parameters() would also work
         optimizer = torch.optim.SGD(
             self.model.wrapped_model.parameters() if self.hparams.dp else self.model.parameters(), 
             lr=self.hparams.lr, 
@@ -162,30 +144,10 @@ class LitModelDP(LightningModule):
         }
         return {'optimizer': optimizer, 'lr_scheduler': scheduler_dict}
 
-
+### ARG PARSING ###
 # custom LightningCLI to include some deepee function calls
 class LightningCLI_Custom(LightningCLI):
-    # override instantiation of the datamodule to create a deepee watchdog
-    # because instantiate_datamodule() is called before instantiate_model() in instantiate_classes()
-    # see: https://pytorch-lightning.readthedocs.io/en/stable/_modules/pytorch_lightning/utilities/cli.html
-    # def instantiate_datamodule(self) -> None:
-    #     """Instantiates the datamodule using self.config_init['data'] if given"""
-    #     if self.datamodule_class is None:
-    #         self.datamodule = None
-    #     elif self.subclass_mode_data:
-    #         self.datamodule = self.config_init['data']
-    #     else:
-    #         self.datamodule = self.datamodule_class(**self.config_init.get('data', {}))
-        
-    #     # create deepee watchdog to be used in model instantiation
-    #     self.watchdog = PrivacyWatchdog(
-    #         self.datamodule.train_dataloader(),
-    #         target_epsilon=10.0,
-    #         abort=False,
-    #         target_delta=1e-5,
-    #         fallback_to_rdp=False,
-    #     )
-
+    
     def add_arguments_to_parser(self, parser):
         """Hook to run some code before arguments are parsed"""
         # that way the batch_size has to be only stated once in the data section 
@@ -232,4 +194,55 @@ class LightningCLI_Custom(LightningCLI):
                 'model': self.model
             })
 
-cli = LightningCLI_Custom(LitModelDP, CIFAR10DataModuleDP)
+            # in addition to the params saved through the model, save some others from trainer
+            important_keys_trainer = ['gpus', 'max_epochs', 'deterministic']
+            self.trainer.logger.experiment.config.update(
+                {
+                    important_key:self.config['trainer'][important_key] 
+                    for important_key in important_keys_trainer
+                }
+            )
+            # the rest is stored as part of the SaveConfigCallbackWandB
+            # (too big to store every metric as part of the above config)
+        
+            # TODO: does this work?
+            self.trainer.logger.experiment.watch(self.model)
+    
+# TODO: better option: directly include as meta data to saved, trained model-weights
+# rather overwrite: pytorch_lightning.callbacks.ModelCheckpoint
+# if done --> pass in 'None' for Trainer.save_config_callback 
+# https://docs.wandb.ai/guides/artifacts/api
+# custom save_config_callback to log all configs as artifact to wandb
+class SaveConfigCallbackWandB(Callback):
+    """Saves a LightningCLI config to the log_dir when training starts"""
+
+    def __init__(
+        self,
+        parser: LightningArgumentParser,
+        config: Union[Namespace, Dict[str, Any]],
+        # NOTE: wandb stores its config file at the same path 'config.yaml'
+        config_filename: str = 'config_pl_cli.yaml'
+    ) -> None:
+        self.parser = parser
+        self.config = config
+        self.config_filename = config_filename
+
+    def on_train_start(self, trainer: Trainer, pl_module: LightningModule) -> None:
+        log_dir = trainer.log_dir or trainer.default_root_dir
+        config_path = os.path.join(log_dir, self.config_filename)
+        self.parser.save(self.config, config_path, skip_none=False)
+        # save config file as artifact
+        artifact = Artifact('complete_config', type='params')
+        artifact.add_file(config_path)
+        trainer.logger.experiment.log_artifact(artifact)
+
+### TRAINER ###
+# for now standard class "Trainer" is used (by default)
+
+cli = LightningCLI_Custom(
+    model_class=LitModelDP, 
+    datamodule_class=CIFAR10DataModuleDP, 
+    save_config_callback=SaveConfigCallbackWandB,
+)
+
+# TODO: cli object can be manipulated (store artifacts to wandb, etc.) + embed in sweep

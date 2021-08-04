@@ -8,7 +8,7 @@ trainer:
     class_path: pytorch_lightning.loggers.WandbLogger
     init_args:
       project: 'raw_performances'
-      name: 'resnet18_cifar10_dp_test'
+      name: 'vgg11_cifar10_dp_test'
       log_model: true
   checkpoint_callback: true
   callbacks: 
@@ -24,6 +24,7 @@ trainer:
         logging_interval: 'step'
   default_root_dir: null
   gradient_clip_val: 0.0
+  # TODO: check if this is actually applied!
   gradient_clip_algorithm: norm
   process_position: 0
   num_nodes: 1
@@ -75,22 +76,28 @@ trainer:
   multiple_trainloader_mode: max_size_cycle
   stochastic_weight_avg: false
 model:
-  # possible models: resnet18
-  model_name: 'resnet18'
-  # possible datasets: cifar10, fashion_mnist, imagenet, mnist
+  # possible models: see model.py
+  model_name: 'vgg11'
+  # possible surgeries: see surgery.py
+  # model_surgeon: 
+  #   class_path: deepee.ModelSurgeon
+  #   init_args:
+  #     converter: deepee.SurgicalProcedures.BN_to_GN
+  # possible datasets: see data.py
   data_name: 'cifar10'
   lr: 0.05
+  lr_scheduler: false
   # DP params
   # under model because I didn't want to overwrite the trainer class 
   # to include these arguments. I can access the params via the model 
   # attribute in the trainer class.
   dp: true
-  L2_clip: 10.0
-  noise_multiplier: 0.0001
+  L2_clip: 1.0 #10.0
+  noise_multiplier: 1.0 #0.0001
   target_epsilon: 10.0
   abort: false
   target_delta: 1e-5
-  fallback_to_rdp: true
+  fallback_to_rdp: false
 data:
   # possible datasets: cifar10, fashion_mnist, imagenet, mnist
   # name: 'cifar10' 
@@ -99,7 +106,7 @@ data:
   val_split: 0.2
   num_workers: 16
   normalize: false
-  batch_size: 128
+  batch_size: 16
   seed: 42
   shuffle: false
   pin_memory: false

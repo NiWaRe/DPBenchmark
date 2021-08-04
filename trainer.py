@@ -1,9 +1,12 @@
 # general python
 from mmap import MAP_EXECUTABLE
 import os
+import deepee
+from torch.nn.modules.batchnorm import BatchNorm1d
+from torch.optim import lr_scheduler
 import yaml
 from argparse import Namespace
-from typing import Union, Any, Dict
+from typing import Callable, ClassVar, Union, Any, Dict
 
 # general ml
 import torch
@@ -37,14 +40,18 @@ from deepee import (PrivacyWrapper, PrivacyWatchdog, UniformDataLoader,
                      ModelSurgeon, SurgicalProcedures, watchdog)
 
 ### MODEL ###
+# TODO: model_surgeon, optimizer, configs checken
 class LitModelDP(LightningModule):
     def __init__(
         self, 
         model_name: str = "resnet18",
+        # TODO: incorporate
+        # model_surgeon: ModelSurgeon = None,
         data_name: str = "cifar10",
         pretrained: bool = False,
         num_classes: int = 10,
         lr: float = 0.05, 
+        lr_scheduler: bool = False,
         batch_size: int = 32,
         dp: bool = False, 
         L2_clip: float = 1.0,
@@ -59,11 +66,13 @@ class LitModelDP(LightningModule):
 
         Args:
             model_name: selection of the model
+            model_surgeon: passed in deepee.ModelSurgeon to make model compatible with DP
             data_name: also pass in what data to train on to possibly adapt model 
                        and to also save data as part of hparams for wandb.
             pretrained: pertrained or not
             num_classes: number of classes
             lr: init learning rate for optimizer
+            lr_scheduler: whether to use a lr_scheduler or not
             batch_size: set through data subclass in configs
             dp: whether to train with dp or not
             L2_clip, noise_multiplier: for deepee.PrivacyWrapper
@@ -76,8 +85,12 @@ class LitModelDP(LightningModule):
         self.save_hyperparameters()
        
         # select standard torchvision model
-        self.model = get_model(model_name, pretrained, num_classes)
-       
+        self.model = get_model(model_name, pretrained, num_classes, data_name)
+        # operate - alter the model to be DP compatible if needed
+        # TODO: incorporate
+        # if model_surgeon: 
+        #     self.model = model_surgeon.operate(self.model)
+
         # DeePee: model init.
         if self.hparams.dp:
             # DeePee: disable automatic optimization, to be able to add noise
@@ -105,7 +118,8 @@ class LitModelDP(LightningModule):
             self.log('spend_epsilon', self.model.current_epsilon)
 
             opt.step()
-            sch.step()
+            if self.hparams.lr_scheduler:
+                sch.step()
             self.model.prepare_next_batch()
 
         return loss
@@ -129,6 +143,7 @@ class LitModelDP(LightningModule):
         self.evaluate(batch, 'test')
 
     def configure_optimizers(self):
+        optims = {}
         # DeePee: we want params from wrapped mdoel
         # self.paramters() -> self.model.wrapped_model.parameters()
         optimizer = torch.optim.SGD(
@@ -137,12 +152,18 @@ class LitModelDP(LightningModule):
             # momentum=0.9, 
             # weight_decay=5e-4
         )
-        steps_per_epoch = 45000 // self.hparams.batch_size
-        scheduler_dict = {
-            'scheduler': OneCycleLR(optimizer, 0.1, epochs=self.trainer.max_epochs, steps_per_epoch=steps_per_epoch),
-            'interval': 'step',
-        }
-        return {'optimizer': optimizer, 'lr_scheduler': scheduler_dict}
+        optims.update({'optimizer': optimizer})
+
+        # learning rate scheduler
+        if self.hparams.lr_scheduler:
+            steps_per_epoch = 45000 // self.hparams.batch_size
+            scheduler_dict = {
+                'scheduler': OneCycleLR(optimizer, 0.1, epochs=self.trainer.max_epochs, steps_per_epoch=steps_per_epoch),
+                'interval': 'step',
+            }
+            optims.update({'lr_scheduler': scheduler_dict})
+
+        return optims
 
 ### ARG PARSING ###
 # custom LightningCLI to include some deepee function calls
@@ -175,12 +196,10 @@ class LightningCLI_Custom(LightningCLI):
             )
 
             # TODO: surgical procedures have to be done automatically depending on model
-            # we alter the model to make it DP-compatible - we call self.model.model 
-            # because our LitModel defines the model itself as an attr self.model. 
-            # This way we can wrap the actual model in the PrivacyWraper without loosing 
-            # compatibility with the trainer.fit() (that calls some functions on the model).
-            surgeon = ModelSurgeon(SurgicalProcedures.BN_to_BN_nostats)
-            self.model.model = surgeon.operate(self.model.model) 
+            # We call self.model.model because our LitModel defines the model itself as 
+            # an attr self.model. This way we can wrap the actual model in the PrivacyWraper 
+            # without loosing compatibility with the trainer.fit() 
+            # (that calls some functions on the model).
             self.model.model = PrivacyWrapper(
                 base_model=self.model.model, 
                 num_replicas=self.model.hparams.batch_size,
@@ -205,8 +224,8 @@ class LightningCLI_Custom(LightningCLI):
             # the rest is stored as part of the SaveConfigCallbackWandB
             # (too big to store every metric as part of the above config)
         
-            # TODO: does this work?
-            self.trainer.logger.experiment.watch(self.model)
+            # TODO: track gradients, etc. --> exceeds maximum metric data size per step
+            #self.trainer.logger.experiment.watch(self.model)
     
 # TODO: better option: directly include as meta data to saved, trained model-weights
 # rather overwrite: pytorch_lightning.callbacks.ModelCheckpoint
@@ -227,14 +246,33 @@ class SaveConfigCallbackWandB(Callback):
         self.config = config
         self.config_filename = config_filename
 
+    ## SAVE FILES AND STORE ARTIFACTS ##
     def on_train_start(self, trainer: Trainer, pl_module: LightningModule) -> None:
         log_dir = trainer.log_dir or trainer.default_root_dir
-        config_path = os.path.join(log_dir, self.config_filename)
+        unique_config_name = trainer.logger.experiment.name + "_" + self.config_filename
+        config_path = os.path.join(
+            log_dir, 
+            unique_config_name,
+        )
+        # save the configs as a file at config_path
         self.parser.save(self.config, config_path, skip_none=False)
         # save config file as artifact
-        artifact = Artifact('complete_config', type='params')
-        artifact.add_file(config_path)
-        trainer.logger.experiment.log_artifact(artifact)
+        c_artifact = Artifact(unique_config_name, type='params')
+        c_artifact.add_file(config_path)
+        trainer.logger.experiment.log_artifact(c_artifact)
+
+        # save model architecture in a textfile
+        unique_model_name = trainer.logger.experiment.name + '_model_architecture.txt'
+        model_arch_path = os.path.join(
+            log_dir, 
+            unique_model_name,
+        )
+        with open(model_arch_path, 'w') as f: 
+            f.write(trainer.model.model.__str__())
+        # save model archicture as txt file
+        m_artifact = Artifact(unique_model_name, type='params')
+        m_artifact.add_file(model_arch_path)
+        trainer.logger.experiment.log_artifact(m_artifact)
 
 ### TRAINER ###
 # for now standard class "Trainer" is used (by default)

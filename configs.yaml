@@ -8,7 +8,7 @@ trainer:
     class_path: pytorch_lightning.loggers.WandbLogger
     init_args:
       project: 'raw_performances'
-      name: 'vgg11_cifar10_dp_test'
+      name: 'resnet18_cifar10_dp_TEST'
       log_model: true
   checkpoint_callback: true
   callbacks: 
@@ -19,9 +19,10 @@ trainer:
       init_args:
         patience: 5
         monitor: 'val_loss'
-    - class_path: pytorch_lightning.callbacks.LearningRateMonitor
-      init_args:
-        logging_interval: 'step'
+    # NOTE: comment this out if lr_scheduler is set to False    
+    # - class_path: pytorch_lightning.callbacks.LearningRateMonitor
+    #   init_args:
+    #     logging_interval: 'step'
   default_root_dir: null
   gradient_clip_val: 0.0
   # TODO: check if this is actually applied!
@@ -77,12 +78,12 @@ trainer:
   stochastic_weight_avg: false
 model:
   # possible models: see model.py
-  model_name: 'vgg11'
+  model_name: 'resnet18'
   # possible surgeries: see surgery.py
-  # model_surgeon: 
-  #   class_path: deepee.ModelSurgeon
-  #   init_args:
-  #     converter: deepee.SurgicalProcedures.BN_to_GN
+  model_surgeon: 
+    class_path: deepee.ModelSurgeon
+    init_args:
+      converter: utils.BN_to_GN
   # possible datasets: see data.py
   data_name: 'cifar10'
   lr: 0.05
@@ -92,12 +93,12 @@ model:
   # to include these arguments. I can access the params via the model 
   # attribute in the trainer class.
   dp: true
-  L2_clip: 1.0 #10.0
-  noise_multiplier: 1.0 #0.0001
-  target_epsilon: 10.0
+  L2_clip: 100.0
+  noise_multiplier: 1e-8
+  target_epsilon: 1e20
   abort: false
   target_delta: 1e-5
-  fallback_to_rdp: false
+  fallback_to_rdp: true
 data:
   # possible datasets: cifar10, fashion_mnist, imagenet, mnist
   # name: 'cifar10' 
@@ -105,7 +106,7 @@ data:
   data_dir: './'
   val_split: 0.2
   num_workers: 16
-  normalize: false
+  normalize: true
   batch_size: 16
   seed: 42
   shuffle: false

@@ -1,14 +1,22 @@
+# STATUS
+# - error likely comes from the fact that no datamodule can be created with the new config
+# - finish putting the data_name or the datamodule_class (what I'm currently trying) in the configs
+# - resnet on mnsit with deepee (no noise) works like a charm, but vgg not at all | resnet on cifar10 not really
+
 # in the subclasses only args can be defined that are also 
 # specified as args in the respective classes passed in to the
 # LightningCLI_Custom. (for the trainer by default: class Trainer)
 seed_everything: 123
+# TEMP: data config alternative
+# datamodule_class: data.CIFAR10DataModuleDP
 trainer:
   # simply replace everything with a bool 'true' to use TensorBoard
   logger: 
     class_path: pytorch_lightning.loggers.WandbLogger
     init_args:
       project: 'raw_performances'
-      name: 'resnet18_cifar10_dp_TEST'
+      # TODO: automate this 
+      name: 'resnet18_cifar10_dp'
       log_model: true
   checkpoint_callback: true
   callbacks: 
@@ -84,18 +92,22 @@ model:
     class_path: deepee.ModelSurgeon
     init_args:
       converter: utils.BN_to_GN
-  # possible datasets: see data.py
   data_name: 'cifar10'
-  lr: 0.05
+  # possible optims: sgd, adam
+  optimizer: 'sgd'
+  opt_kwargs: 
+    - lr: 0.05
+    - momentum: 0.0
+    - weight_decay: 0.0
   lr_scheduler: false
   # DP params
   # under model because I didn't want to overwrite the trainer class 
   # to include these arguments. I can access the params via the model 
   # attribute in the trainer class.
   dp: true
-  L2_clip: 100.0
-  noise_multiplier: 1e-8
-  target_epsilon: 1e20
+  L2_clip: 1.0 #100 
+  noise_multiplier: 0.1 #1e-8
+  target_epsilon: 1e5
   abort: false
   target_delta: 1e-5
   fallback_to_rdp: true

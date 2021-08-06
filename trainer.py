@@ -6,13 +6,14 @@ from torch.nn.modules.batchnorm import BatchNorm1d
 from torch.optim import lr_scheduler
 import yaml
 from argparse import Namespace
-from typing import Callable, ClassVar, Union, Any, Dict
+from typing import Callable, ClassVar, Union, Any, Dict, Type
 
 # general ml
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import pytorch_lightning as pl
+from torch.optim import Optimizer
 
 # pytorch lightning
 from pytorch_lightning import LightningModule, seed_everything, Trainer
@@ -20,9 +21,10 @@ from pytorch_lightning.utilities.cli import LightningCLI, LightningArgumentParse
 from pytorch_lightning.callbacks import Callback
 from torch.optim.lr_scheduler import OneCycleLR
 from torch.optim.swa_utils import AveragedModel, update_bn
+from pytorch_lightning.core.datamodule import LightningDataModule
 
 # data
-from data import LitDataModuleDP, CIFAR10DataModule, CIFAR10DataModuleDP
+from data import LitDataModuleDP, CIFAR10DataModule, CIFAR10DataModuleDP, MNISTDataModuleDP
 
 # model 
 from models import get_model
@@ -45,12 +47,13 @@ class LitModelDP(LightningModule):
     def __init__(
         self, 
         model_name: str = "resnet18",
-        # TODO: incorporate
-        # model_surgeon: ModelSurgeon = None,
+        model_surgeon: ModelSurgeon = None,
         data_name: str = "cifar10",
+        datamodule_class: Type[LightningDataModule] = None,
         pretrained: bool = False,
         num_classes: int = 10,
-        lr: float = 0.05, 
+        optimizer: str = "sgd",
+        opt_kwargs: str = '{"lr":0.05}', 
         lr_scheduler: bool = False,
         batch_size: int = 32,
         dp: bool = False, 
@@ -71,6 +74,7 @@ class LitModelDP(LightningModule):
                        and to also save data as part of hparams for wandb.
             pretrained: pertrained or not
             num_classes: number of classes
+            optimizer: pass in the optimizer to be used
             lr: init learning rate for optimizer
             lr_scheduler: whether to use a lr_scheduler or not
             batch_size: set through data subclass in configs
@@ -87,12 +91,11 @@ class LitModelDP(LightningModule):
         # select standard torchvision model
         self.model = get_model(model_name, pretrained, num_classes, data_name)
         # operate - alter the model to be DP compatible if needed
-        # TODO: incorporate
-        # if model_surgeon: 
-        #     self.model = model_surgeon.operate(self.model)
+        if model_surgeon: 
+            self.model = model_surgeon.operate(self.model)
 
         # DeePee: model init.
-        if self.hparams.dp:
+        if dp:
             # DeePee: disable automatic optimization, to be able to add noise
             self.automatic_optimization = False
 
@@ -109,17 +112,18 @@ class LitModelDP(LightningModule):
         if self.hparams.dp:
             # DeePee: adding the DP procedure
             opt = self.optimizers()
-            sch = self.lr_schedulers()
             opt.zero_grad()
             # manual_backward automatically applies scaling, etc.
             self.manual_backward(loss)
             self.model.clip_and_accumulate()
             self.model.noise_gradient()
+            opt.step()
             self.log('spend_epsilon', self.model.current_epsilon)
 
-            opt.step()
+            # learning rate scheduler if configured so
             if self.hparams.lr_scheduler:
-                sch.step()
+                self.lr_schedulers().step()
+
             self.model.prepare_next_batch()
 
         return loss
@@ -146,12 +150,18 @@ class LitModelDP(LightningModule):
         optims = {}
         # DeePee: we want params from wrapped mdoel
         # self.paramters() -> self.model.wrapped_model.parameters()
-        optimizer = torch.optim.SGD(
-            self.model.wrapped_model.parameters() if self.hparams.dp else self.model.parameters(), 
-            lr=self.hparams.lr, 
-            # momentum=0.9, 
-            # weight_decay=5e-4
-        )
+        if self.hparams.optimizer=='sgd':
+            optimizer = torch.optim.SGD(
+                self.model.wrapped_model.parameters() if self.hparams.dp else self.model.parameters(), 
+                # TODO: change 
+                lr=0.05,
+            )
+        elif self.hparams.optimizer=='adam':
+            optimizer = torch.optim.Adam(
+                self.model.wrapped_model.parameters() if self.hparams.dp else self.model.parameters(), 
+                # TODO: change
+                lr=0.05,
+            )
         optims.update({'optimizer': optimizer})
 
         # learning rate scheduler
@@ -174,6 +184,8 @@ class LightningCLI_Custom(LightningCLI):
         # that way the batch_size has to be only stated once in the data section 
         parser.link_arguments('data.batch_size', 'model.batch_size')
         # parser.link_arguments('model.dp', 'data.dp')
+        # TEMP: data config alternative
+        # parser.link_arguments('datamodule_class', 'model.datamodule_class')
 
     def before_fit(self):
         """Hook to run some code before fit is started"""
@@ -184,18 +196,19 @@ class LightningCLI_Custom(LightningCLI):
         # TODO: why do I have to call them explictly here -- in docs not mentioned (not found in .trainerfit())
         self.datamodule.prepare_data()
         self.datamodule.setup() 
-        self.model.datamodule = self.datamodule
+        
+        # TODO: why did i write this here????
+        # self.model.datamodule = self.datamodule
 
         if self.model.hparams.dp:
             watchdog = PrivacyWatchdog(
-                    self.datamodule.train_dataloader(),
-                    target_epsilon=self.model.hparams.target_epsilon,
-                    abort=self.model.hparams.abort,
-                    target_delta=self.model.hparams.target_delta,
-                    fallback_to_rdp=self.model.hparams.fallback_to_rdp,
+                self.datamodule.train_dataloader(),
+                target_epsilon=self.model.hparams.target_epsilon,
+                abort=self.model.hparams.abort,
+                target_delta=self.model.hparams.target_delta,
+                fallback_to_rdp=self.model.hparams.fallback_to_rdp,
             )
 
-            # TODO: surgical procedures have to be done automatically depending on model
             # We call self.model.model because our LitModel defines the model itself as 
             # an attr self.model. This way we can wrap the actual model in the PrivacyWraper 
             # without loosing compatibility with the trainer.fit() 
@@ -233,7 +246,8 @@ class LightningCLI_Custom(LightningCLI):
 # https://docs.wandb.ai/guides/artifacts/api
 # custom save_config_callback to log all configs as artifact to wandb
 class SaveConfigCallbackWandB(Callback):
-    """Saves a LightningCLI config to the log_dir when training starts"""
+    """Saves a LightningCLI config and model architecture print 
+       to the log_dir when training starts"""
 
     def __init__(
         self,
@@ -279,6 +293,8 @@ class SaveConfigCallbackWandB(Callback):
 
 cli = LightningCLI_Custom(
     model_class=LitModelDP, 
+    # TODO: think about making model selection and data selection more consistent
+    # --> try to use LitDataModuleDP as wrapper class
     datamodule_class=CIFAR10DataModuleDP, 
     save_config_callback=SaveConfigCallbackWandB,
 )

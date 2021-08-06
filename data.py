@@ -166,6 +166,65 @@ class CIFAR10DataModuleDP(CIFAR10DataModule):
     def test_dataloader(self) -> UniformDataLoader:
         return UniformDataLoader(self.dataset_test, batch_size=self.batch_size, num_workers=self.num_workers)
 
+class MNISTDataModuleDP(MNISTDataModule):
+    """
+    This is based on the preconfigured torchvision datamodules (e.g. CIFAR10DataModule)
+    """
+    def __init__(
+        self,
+        data_dir: Optional[str] = None,
+        val_split: Union[int, float] = 0.2,
+        num_workers: int = 16,
+        normalize: bool = False,
+        batch_size: int = 32,
+        seed: int = 42,
+        shuffle: bool = False,
+        pin_memory: bool = False,
+        drop_last: bool = False,
+        *args: Any,
+        **kwargs: Any,
+    ) -> None:
+        """
+        Args:
+            name: What torchvision dataset to select (mnist, fashion_mnist, cifar10 or imagenet)
+            data_dir: Where to save/load the data
+            val_split: Percent (float) or number (int) of samples to use for the validation split
+            num_workers: How many workers to use for loading data
+            normalize: If true applies image normalize
+            batch_size: How many samples per batch to load
+            seed: Random seed to be used for train/val/test splits
+            shuffle: If true shuffles the train data every epoch
+            pin_memory: If true, the data loader will copy Tensors into CUDA pinned memory before
+                        returning them
+            drop_last: If true drops the last incomplete batch
+            dp: Whether this should be compatible with DeePee or not
+        """
+
+        super().__init__(  # type: ignore[misc]
+            data_dir=data_dir,
+            val_split=val_split,
+            num_workers=num_workers,
+            normalize=normalize,
+            batch_size=batch_size,
+            seed=seed,
+            shuffle=shuffle,
+            pin_memory=pin_memory,
+            drop_last=drop_last,
+            *args,
+            **kwargs,
+        )
+
+    # DeePee: overload dataloaders to be able to create the privacy watchdog
+    # TODO: if UniformDataLoader would accept *args, **kwargs 
+    #       I could simply overload VisionDataModule._data_loader
+    def train_dataloader(self) -> UniformDataLoader:
+        return UniformDataLoader(self.dataset_train, batch_size=self.batch_size, num_workers=self.num_workers)
+    def val_dataloader(self) -> UniformDataLoader:
+        return UniformDataLoader(self.dataset_val, batch_size=self.batch_size, num_workers=self.num_workers)
+    def test_dataloader(self) -> UniformDataLoader:
+        return UniformDataLoader(self.dataset_test, batch_size=self.batch_size, num_workers=self.num_workers)
+
+
 
 ### Custom DataModules ###
 # TODO: to be added. 

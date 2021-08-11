@@ -16,7 +16,7 @@ trainer:
     init_args:
       project: 'raw_performances'
       # TODO: automate this 
-      name: 'resnet18_cifar10_dp'
+      name: 'vgg11_cifar10_dp_opacus_long'
       log_model: true
   checkpoint_callback: true
   callbacks: 
@@ -86,12 +86,13 @@ trainer:
   stochastic_weight_avg: false
 model:
   # possible models: see model.py
-  model_name: 'resnet18'
+  model_name: 'vgg11'
   # possible surgeries: see surgery.py
   model_surgeon: 
     class_path: deepee.ModelSurgeon
     init_args:
       converter: utils.BN_to_GN
+  # NOTE: chnage model_surgeon to 'None' if not needed
   data_name: 'cifar10'
   # possible optims: sgd, adam
   optimizer: 'sgd'
@@ -104,13 +105,15 @@ model:
   # under model because I didn't want to overwrite the trainer class 
   # to include these arguments. I can access the params via the model 
   # attribute in the trainer class.
+  dp_tool: "opacus"
+  # TODO: with dp_tool this is probably not necessary anymore
   dp: true
-  L2_clip: 1.0 #100 
-  noise_multiplier: 0.1 #1e-8
-  target_epsilon: 1e5
-  abort: false
+  L2_clip: 1.0
+  noise_multiplier: 0.75
+  target_epsilon: 10.0
+  abort: true
   target_delta: 1e-5
-  fallback_to_rdp: true
+  fallback_to_rdp: false
 data:
   # possible datasets: cifar10, fashion_mnist, imagenet, mnist
   # name: 'cifar10' 

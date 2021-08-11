@@ -41,6 +41,10 @@ from pytorch_lightning.callbacks import ModelCheckpoint, model_checkpoint
 from deepee import (PrivacyWrapper, PrivacyWatchdog, UniformDataLoader,
                      ModelSurgeon, SurgicalProcedures, watchdog)
 
+from opacus import PrivacyEngine, privacy_engine
+from opacus.dp_model_inspector import DPModelInspector
+from opacus.utils import module_modification
+
 ### MODEL ###
 # TODO: model_surgeon, optimizer, configs checken
 class LitModelDP(LightningModule):
@@ -57,6 +61,7 @@ class LitModelDP(LightningModule):
         lr_scheduler: bool = False,
         batch_size: int = 32,
         dp: bool = False, 
+        dp_tool: str = "opacus",
         L2_clip: float = 1.0,
         noise_multiplier: float = 1.0,
         target_epsilon: float = 10.0,
@@ -69,7 +74,7 @@ class LitModelDP(LightningModule):
 
         Args:
             model_name: selection of the model
-            model_surgeon: passed in deepee.ModelSurgeon to make model compatible with DP
+            model_surgeon: passed in deepee.ModelSurgeon to make model compatible with DP [deepee]
             data_name: also pass in what data to train on to possibly adapt model 
                        and to also save data as part of hparams for wandb.
             pretrained: pertrained or not
@@ -78,6 +83,7 @@ class LitModelDP(LightningModule):
             lr: init learning rate for optimizer
             lr_scheduler: whether to use a lr_scheduler or not
             batch_size: set through data subclass in configs
+            dp_tool: whether to use 'opacus' or 'deepee' as DP tool
             dp: whether to train with dp or not
             L2_clip, noise_multiplier: for deepee.PrivacyWrapper
             target_epsilon, abort
@@ -93,6 +99,13 @@ class LitModelDP(LightningModule):
         # operate - alter the model to be DP compatible if needed
         if model_surgeon: 
             self.model = model_surgeon.operate(self.model)
+
+        # TODO: only temp., do the same as for deepee
+        if model_name == "resnet18" and dp_tool == "opacus": 
+            self.model = module_modification.convert_batchnorm_modules(self.model)
+            # test whether model is DP compatible
+            inspector = DPModelInspector()
+            inspector.validate(self.model)
 
         # DeePee: model init.
         if dp:
@@ -115,16 +128,31 @@ class LitModelDP(LightningModule):
             opt.zero_grad()
             # manual_backward automatically applies scaling, etc.
             self.manual_backward(loss)
-            self.model.clip_and_accumulate()
-            self.model.noise_gradient()
-            opt.step()
+
+            if self.hparams.dp_tool == "opacus":
+                # TODO: if accumulation_steps isn't always ==1 
+                # if ((i + 1) % N_ACCUMULATION_STEPS == 0) or ((i + 1) == len(train_loader)):
+                #    optimizer.step()
+                #else:
+                #    optimizer.virtual_step() # take a virtual step
+                #opt.virtual_step()
+                opt.step()
+                # TODO: do smt with best_alpha
+                self.model.current_epsilon, best_alpha = opt.privacy_engine.get_privacy_spent(
+                    self.hparams.target_delta,
+                )
+            elif self.hparams.dp_tool == "deepee":
+                self.model.clip_and_accumulate()
+                self.model.noise_gradient()
+                opt.step()
+                self.model.prepare_next_batch()
+                # self.model.current_epsilon is already property of class
+            
             self.log('spend_epsilon', self.model.current_epsilon)
 
             # learning rate scheduler if configured so
             if self.hparams.lr_scheduler:
                 self.lr_schedulers().step()
-
-            self.model.prepare_next_batch()
 
         return loss
 
@@ -152,16 +180,25 @@ class LitModelDP(LightningModule):
         # self.paramters() -> self.model.wrapped_model.parameters()
         if self.hparams.optimizer=='sgd':
             optimizer = torch.optim.SGD(
-                self.model.wrapped_model.parameters() if self.hparams.dp else self.model.parameters(), 
+                self.model.wrapped_model.parameters() 
+                if self.hparams.dp and self.hparams.dp_tool=='deepee'
+                else self.model.parameters(), 
                 # TODO: change 
                 lr=0.05,
             )
         elif self.hparams.optimizer=='adam':
             optimizer = torch.optim.Adam(
-                self.model.wrapped_model.parameters() if self.hparams.dp else self.model.parameters(), 
+                self.model.wrapped_model.parameters() 
+                if self.hparams.dp and self.hparams.dp_tool=='deepee'
+                else self.model.parameters(), 
                 # TODO: change
                 lr=0.05,
             )
+
+        if self.hparams.dp_tool=='opacus':
+            # to be sure that if we also have a lr_scheduler we just get the optimizers
+            self.privacy_engine.attach(optimizer) #['optimizer'])
+
         optims.update({'optimizer': optimizer})
 
         # learning rate scheduler
@@ -183,6 +220,7 @@ class LightningCLI_Custom(LightningCLI):
         """Hook to run some code before arguments are parsed"""
         # that way the batch_size has to be only stated once in the data section 
         parser.link_arguments('data.batch_size', 'model.batch_size')
+        parser.link_arguments('model.dp_tool', 'data.dp_tool')
         # parser.link_arguments('model.dp', 'data.dp')
         # TEMP: data config alternative
         # parser.link_arguments('datamodule_class', 'model.datamodule_class')
@@ -201,25 +239,48 @@ class LightningCLI_Custom(LightningCLI):
         # self.model.datamodule = self.datamodule
 
         if self.model.hparams.dp:
-            watchdog = PrivacyWatchdog(
-                self.datamodule.train_dataloader(),
-                target_epsilon=self.model.hparams.target_epsilon,
-                abort=self.model.hparams.abort,
-                target_delta=self.model.hparams.target_delta,
-                fallback_to_rdp=self.model.hparams.fallback_to_rdp,
-            )
+            if self.model.hparams.dp_tool == "deepee":
+                watchdog = PrivacyWatchdog(
+                    self.datamodule.train_dataloader(),
+                    target_epsilon=self.model.hparams.target_epsilon,
+                    abort=self.model.hparams.abort,
+                    target_delta=self.model.hparams.target_delta,
+                    fallback_to_rdp=self.model.hparams.fallback_to_rdp,
+                )
 
-            # We call self.model.model because our LitModel defines the model itself as 
-            # an attr self.model. This way we can wrap the actual model in the PrivacyWraper 
-            # without loosing compatibility with the trainer.fit() 
-            # (that calls some functions on the model).
-            self.model.model = PrivacyWrapper(
-                base_model=self.model.model, 
-                num_replicas=self.model.hparams.batch_size,
-                L2_clip=self.model.hparams.L2_clip, 
-                noise_multiplier=self.model.hparams.noise_multiplier, 
-                watchdog=watchdog,
-            )
+                # We call self.model.model because our LitModel defines the model itself as 
+                # an attr self.model. This way we can wrap the actual model in the PrivacyWraper 
+                # without loosing compatibility with the trainer.fit() 
+                # (that calls some functions on the model).
+                self.model.model = PrivacyWrapper(
+                    base_model=self.model.model, 
+                    num_replicas=self.model.hparams.batch_size,
+                    L2_clip=self.model.hparams.L2_clip, 
+                    noise_multiplier=self.model.hparams.noise_multiplier, 
+                    watchdog=watchdog,
+                )
+            elif self.model.hparams.dp_tool == "opacus":
+                sample_rate = self.datamodule.batch_size/len(self.datamodule.dataset_train)
+                # TODO: N_ACCUMULATION_STEPS = int(VIRTUAL_BATCH_SIZE / BATCH_SIZE)
+                n_accumulation_steps = 1
+                # NOTE: privacy_engine.noise_multiplier (sigma) is auto. calculated with epochs
+                # we shift to cuda if gpus > 0. We only have on GPU so parallel isn't interesting. 
+                # For generalization: we could change this to also work with multiple GPUs.
+                # See PL source code.
+                self.model.privacy_engine = PrivacyEngine(
+                    self.model.model,
+                    sample_rate=sample_rate * n_accumulation_steps,
+                    epochs = self.trainer.max_epochs,
+                    target_epsilon = self.model.hparams.target_epsilon,
+                    target_delta = self.model.hparams.target_delta,
+                    max_grad_norm=self.model.hparams.L2_clip,
+                ).to("cuda:0" if self.trainer.gpus else "cpu")
+                print(f"Noise Multiplier: {self.model.privacy_engine.noise_multiplier}")
+                # TODO: for now the adding to the optimizers is in model.configure_optimizers()
+                # because at this point model.configure_optimizers() wasn't called yet
+                # Think about whether to leave it like that
+            else: 
+                print("Use either 'opacus' or 'deepee' as DP tool.")
 
             # self.fit_kwargs is passed to self.trainer.fit() in LightningCLI.fit(self)
             self.fit_kwargs.update({

@@ -16,6 +16,8 @@ from pl_bolts.datamodules import (
 from deepee import (PrivacyWrapper, PrivacyWatchdog, UniformDataLoader,
                      ModelSurgeon, SurgicalProcedures)
 
+from opacus.utils.uniform_sampler import UniformWithReplacementSampler
+
 ### Standard Lightning Bolt Data Modules ###
 # TODO: The PrivacyWrapper also supports normal DataLoaders -- don't the DataModules have that type?
 # TODO: Instantiating just one of the classes doens't work (says data_dir isn't given -- although it is?)
@@ -123,6 +125,7 @@ class CIFAR10DataModuleDP(CIFAR10DataModule):
         shuffle: bool = False,
         pin_memory: bool = False,
         drop_last: bool = False,
+        dp_tool: str = "opacus",
         *args: Any,
         **kwargs: Any,
     ) -> None:
@@ -140,6 +143,7 @@ class CIFAR10DataModuleDP(CIFAR10DataModule):
                         returning them
             drop_last: If true drops the last incomplete batch
             dp: Whether this should be compatible with DeePee or not
+            dp_tool: whether to use 'opacus' or 'deepee' as DP tool
         """
 
         super().__init__(  # type: ignore[misc]
@@ -155,16 +159,56 @@ class CIFAR10DataModuleDP(CIFAR10DataModule):
             *args,
             **kwargs,
         )
+        self.dp_tool = dp_tool
 
     # DeePee: overload dataloaders to be able to create the privacy watchdog
     # TODO: if UniformDataLoader would accept *args, **kwargs 
     #       I could simply overload VisionDataModule._data_loader
-    def train_dataloader(self) -> UniformDataLoader:
-        return UniformDataLoader(self.dataset_train, batch_size=self.batch_size, num_workers=self.num_workers)
-    def val_dataloader(self) -> UniformDataLoader:
-        return UniformDataLoader(self.dataset_val, batch_size=self.batch_size, num_workers=self.num_workers)
-    def test_dataloader(self) -> UniformDataLoader:
-        return UniformDataLoader(self.dataset_test, batch_size=self.batch_size, num_workers=self.num_workers)
+    def train_dataloader(self) -> Union[UniformDataLoader, DataLoader]:
+        dataloader = None
+        if self.dp_tool == "opacus":
+            dataloader = DataLoader(
+                self.dataset_train, 
+                num_workers=self.num_workers,
+                batch_sampler=UniformWithReplacementSampler(
+                    num_samples=len(self.dataset_train), 
+                    sample_rate=self.batch_size/len(self.dataset_train)
+                ),
+            )
+        elif self.dp_tool == "deepee":
+            dataloader = UniformDataLoader(
+                self.dataset_train, 
+                batch_size=self.batch_size, 
+                num_workers=self.num_workers
+            )
+        else: 
+            print("Please select either opacus or deepee as DP tool")
+        return dataloader
+
+    def val_dataloader(self) -> Union[UniformDataLoader, DataLoader]:
+        dataloader = None
+        if self.dp_tool == "opacus":
+            dataloader = DataLoader(
+                self.dataset_val, 
+                num_workers=self.num_workers,
+                batch_sampler=UniformWithReplacementSampler(
+                    num_samples=len(self.dataset_val), 
+                    sample_rate=self.batch_size/len(self.dataset_val)
+                ),
+            )
+        elif self.dp_tool == "deepee":
+            dataloader = UniformDataLoader(
+                self.dataset_val, 
+                batch_size=self.batch_size, 
+                num_workers=self.num_workers
+            )
+        else: 
+            print("Please select either opacus or deepee as DP tool")
+        return dataloader
+
+    # TODO: test loader should stay the same, right?
+    #def test_dataloader(self) -> Union[UniformDataLoader, DataLoader]:
+
 
 class MNISTDataModuleDP(MNISTDataModule):
     """
@@ -181,6 +225,7 @@ class MNISTDataModuleDP(MNISTDataModule):
         shuffle: bool = False,
         pin_memory: bool = False,
         drop_last: bool = False,
+        dp_tool: str = "opacus",
         *args: Any,
         **kwargs: Any,
     ) -> None:
@@ -198,6 +243,7 @@ class MNISTDataModuleDP(MNISTDataModule):
                         returning them
             drop_last: If true drops the last incomplete batch
             dp: Whether this should be compatible with DeePee or not
+            dp_tool: whether to use 'opacus' or 'deepee' as DP tool
         """
 
         super().__init__(  # type: ignore[misc]
@@ -213,17 +259,55 @@ class MNISTDataModuleDP(MNISTDataModule):
             *args,
             **kwargs,
         )
+        self.dp_tool = dp_tool
 
-    # DeePee: overload dataloaders to be able to create the privacy watchdog
+    ## DeePee: overload dataloaders to be able to create the privacy watchdog
     # TODO: if UniformDataLoader would accept *args, **kwargs 
     #       I could simply overload VisionDataModule._data_loader
-    def train_dataloader(self) -> UniformDataLoader:
-        return UniformDataLoader(self.dataset_train, batch_size=self.batch_size, num_workers=self.num_workers)
-    def val_dataloader(self) -> UniformDataLoader:
-        return UniformDataLoader(self.dataset_val, batch_size=self.batch_size, num_workers=self.num_workers)
-    def test_dataloader(self) -> UniformDataLoader:
-        return UniformDataLoader(self.dataset_test, batch_size=self.batch_size, num_workers=self.num_workers)
+    def train_dataloader(self) -> Union[UniformDataLoader, DataLoader]:
+        dataloader = None
+        if self.dp_tool == "opacus":
+            dataloader = DataLoader(
+                self.dataset_train, 
+                num_workers=self.num_workers,
+                batch_sampler=UniformWithReplacementSampler(
+                    num_samples=len(self.dataset_train), 
+                    sample_rate=self.batch_size/len(self.dataset_train)
+                ),
+            )
+        elif self.dp_tool == "deepee":
+            dataloader = UniformDataLoader(
+                self.dataset_train, 
+                batch_size=self.batch_size, 
+                num_workers=self.num_workers
+            )
+        else: 
+            print("Please select either opacus or deepee as DP tool")
+        return dataloader
 
+    def val_dataloader(self) -> Union[UniformDataLoader, DataLoader]:
+        dataloader = None
+        if self.dp_tool == "opacus":
+            dataloader = DataLoader(
+                self.dataset_val, 
+                num_workers=self.num_workers,
+                batch_sampler=UniformWithReplacementSampler(
+                    num_samples=len(self.dataset_val), 
+                    sample_rate=self.batch_size/len(self.dataset_val)
+                ),
+            )
+        elif self.dp_tool == "deepee":
+            dataloader = UniformDataLoader(
+                self.dataset_val, 
+                batch_size=self.batch_size, 
+                num_workers=self.num_workers
+            )
+        else: 
+            print("Please select either opacus or deepee as DP tool")
+        return dataloader
+
+    # TODO: test loader should stay the same, right?
+    #def test_dataloader(self) -> Union[UniformDataLoader, DataLoader]:
 
 
 ### Custom DataModules ###

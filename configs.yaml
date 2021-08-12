@@ -98,9 +98,9 @@ model:
   # possible optims: sgd, adam
   optimizer: 'sgd'
   opt_kwargs: 
-    - lr: 0.05
-    - momentum: 0.0
-    - weight_decay: 0.0
+    lr: 0.05
+    momentum: 0.0
+    weight_decay: 0.0
   lr_scheduler: false
   batch_size: 16
   virtual_batch_size: 16

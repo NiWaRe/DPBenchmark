@@ -57,7 +57,7 @@ class LitModelDP(LightningModule):
         pretrained: bool = False,
         num_classes: int = 10,
         optimizer: str = "sgd",
-        opt_kwargs: str = '{"lr":0.05}', 
+        opt_kwargs: dict = {"lr":0.05}, 
         lr_scheduler: bool = False,
         batch_size: int = 32,
         virtual_batch_size: int = 32,
@@ -184,16 +184,14 @@ class LitModelDP(LightningModule):
                 self.model.wrapped_model.parameters() 
                 if self.hparams.dp and self.hparams.dp_tool=='deepee'
                 else self.model.parameters(), 
-                # TODO: change 
-                lr=0.05,
+                **self.hparams.opt_kwargs,
             )
         elif self.hparams.optimizer=='adam':
             optimizer = torch.optim.Adam(
                 self.model.wrapped_model.parameters() 
                 if self.hparams.dp and self.hparams.dp_tool=='deepee'
                 else self.model.parameters(), 
-                # TODO: change
-                lr=0.05,
+                **self.hparams.opt_kwargs,
             )
 
         if self.hparams.dp_tool=='opacus':
@@ -217,7 +215,7 @@ class LitModelDP(LightningModule):
 class LightningCLI_Custom(LightningCLI):
     
     # NOTE self.datamodule.prepare_data() hook might be handy in the future
-    
+
     def add_arguments_to_parser(self, parser):
         """Hook to run some code before arguments are parsed"""
         # that way the batch_size has to be only stated once in the data section 

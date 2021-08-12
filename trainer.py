@@ -60,6 +60,7 @@ class LitModelDP(LightningModule):
         opt_kwargs: str = '{"lr":0.05}', 
         lr_scheduler: bool = False,
         batch_size: int = 32,
+        virtual_batch_size: int = 32,
         dp: bool = False, 
         dp_tool: str = "opacus",
         L2_clip: float = 1.0,
@@ -83,11 +84,11 @@ class LitModelDP(LightningModule):
             lr: init learning rate for optimizer
             lr_scheduler: whether to use a lr_scheduler or not
             batch_size: set through data subclass in configs
+            virtual_batch_size: has to be divisible by batch_size. [opacus]
             dp_tool: whether to use 'opacus' or 'deepee' as DP tool
             dp: whether to train with dp or not
-            L2_clip, noise_multiplier: for deepee.PrivacyWrapper
-            target_epsilon, abort
-            target_delta, callback_to_rdp: for deepee.PrivacyWatchdog
+            L2_clip, noise_multiplier,target_epsilon, target_delta: [deepee, opacus]
+            abort, callback_to_rdp: [deepee]
         """
         super().__init__()
 
@@ -97,7 +98,8 @@ class LitModelDP(LightningModule):
         # select standard torchvision model
         self.model = get_model(model_name, pretrained, num_classes, data_name)
         # operate - alter the model to be DP compatible if needed
-        if model_surgeon: 
+        # TODO: only temporary resnet18 there
+        if model_surgeon and model_name == "resnet18": 
             self.model = model_surgeon.operate(self.model)
 
         # TODO: only temp., do the same as for deepee
@@ -130,12 +132,11 @@ class LitModelDP(LightningModule):
             self.manual_backward(loss)
 
             if self.hparams.dp_tool == "opacus":
-                # TODO: if accumulation_steps isn't always ==1 
-                # if ((i + 1) % N_ACCUMULATION_STEPS == 0) or ((i + 1) == len(train_loader)):
-                #    optimizer.step()
-                #else:
-                #    optimizer.virtual_step() # take a virtual step
-                #opt.virtual_step()
+                # NOTE: virtual steps can be taken to do calculations with less memory consumption. 
+                # Hence allowing a bigger batch_size. To do twice as big batch_sizes with only a marginal 
+                # more memory consuption do an opt.step() and an opt.virtual_step() alternating. 
+                # opt.step() does a real step and opt.virtual_step() only aggregates gradients which are
+                # then aggregated to the next opt.step(). Use self.hparams.n_accumulation_steps
                 opt.step()
                 # TODO: do smt with best_alpha
                 self.model.current_epsilon, best_alpha = opt.privacy_engine.get_privacy_spent(
@@ -196,8 +197,7 @@ class LitModelDP(LightningModule):
             )
 
         if self.hparams.dp_tool=='opacus':
-            # to be sure that if we also have a lr_scheduler we just get the optimizers
-            self.privacy_engine.attach(optimizer) #['optimizer'])
+            self.privacy_engine.attach(optimizer)
 
         optims.update({'optimizer': optimizer})
 
@@ -216,10 +216,12 @@ class LitModelDP(LightningModule):
 # custom LightningCLI to include some deepee function calls
 class LightningCLI_Custom(LightningCLI):
     
+    # NOTE self.datamodule.prepare_data() hook might be handy in the future
+    
     def add_arguments_to_parser(self, parser):
         """Hook to run some code before arguments are parsed"""
         # that way the batch_size has to be only stated once in the data section 
-        parser.link_arguments('data.batch_size', 'model.batch_size')
+        parser.link_arguments('model.batch_size', 'data.batch_size')
         parser.link_arguments('model.dp_tool', 'data.dp_tool')
         # parser.link_arguments('model.dp', 'data.dp')
         # TEMP: data config alternative
@@ -230,8 +232,8 @@ class LightningCLI_Custom(LightningCLI):
         # possible because self.datamodule and self.model are instantiated beforehand
         # in LightningCLI.instantiate_trainer(self) -- see docs
         
-        # NOTE self.datamodule.prepare_data() hook might be handy in the future
-        # TODO: why do I have to call them explictly here -- in docs not mentioned (not found in .trainerfit())
+        # TODO: why do I have to call them explictly here 
+        #       -- in docs not mentioned (not found in .trainerfit())
         self.datamodule.prepare_data()
         self.datamodule.setup() 
         
@@ -260,25 +262,29 @@ class LightningCLI_Custom(LightningCLI):
                     watchdog=watchdog,
                 )
             elif self.model.hparams.dp_tool == "opacus":
+                # NOTE: for now the adding to the optimizers is in model.configure_optimizers()
+                # because at this point model.configure_optimizers() wasn't called yet. 
+                # That's also why we save n_accumulation_steps as a model parameter.
                 sample_rate = self.datamodule.batch_size/len(self.datamodule.dataset_train)
-                # TODO: N_ACCUMULATION_STEPS = int(VIRTUAL_BATCH_SIZE / BATCH_SIZE)
-                n_accumulation_steps = 1
-                # NOTE: privacy_engine.noise_multiplier (sigma) is auto. calculated with epochs
-                # we shift to cuda if gpus > 0. We only have on GPU so parallel isn't interesting. 
-                # For generalization: we could change this to also work with multiple GPUs.
-                # See PL source code.
+                self.model.n_accumulation_steps = int(
+                    self.model.hparams.virtual_batch_size/self.model.hparams.batch_size
+                )
+
+                # NOTE: For multiple GPU support: see PL code. 
+                # For now we only consider shifting to cuda, if there's at least one GPU ('gpus' > 0)
                 self.model.privacy_engine = PrivacyEngine(
                     self.model.model,
-                    sample_rate=sample_rate * n_accumulation_steps,
-                    epochs = self.trainer.max_epochs,
+                    sample_rate=sample_rate * self.model.n_accumulation_steps,
                     target_epsilon = self.model.hparams.target_epsilon,
                     target_delta = self.model.hparams.target_delta,
+                    # NOTE: either 'epochs' or 'noise_multiplier' can be specified.
+                    # If noise_multiplier is not specified, (target_epsilon, target_delta, epochs) 
+                    # is used to calculate it.
+                    noise_multiplier=self.model.hparams.noise_multiplier,
                     max_grad_norm=self.model.hparams.L2_clip,
                 ).to("cuda:0" if self.trainer.gpus else "cpu")
                 print(f"Noise Multiplier: {self.model.privacy_engine.noise_multiplier}")
-                # TODO: for now the adding to the optimizers is in model.configure_optimizers()
-                # because at this point model.configure_optimizers() wasn't called yet
-                # Think about whether to leave it like that
+
             else: 
                 print("Use either 'opacus' or 'deepee' as DP tool.")
 

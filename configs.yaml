@@ -16,7 +16,7 @@ trainer:
     init_args:
       project: 'raw_performances'
       # TODO: automate this 
-      name: 'vgg11_cifar10_dp_opacus_long'
+      name: 'resnet18_cifar10_dp_short'
       log_model: true
   checkpoint_callback: true
   callbacks: 
@@ -86,7 +86,8 @@ trainer:
   stochastic_weight_avg: false
 model:
   # possible models: see model.py
-  model_name: 'vgg11'
+  model_name: 'resnet18'
+  # NOTE: this is only relevant for the deepee DP tool
   # possible surgeries: see surgery.py
   model_surgeon: 
     class_path: deepee.ModelSurgeon
@@ -101,6 +102,8 @@ model:
     - momentum: 0.0
     - weight_decay: 0.0
   lr_scheduler: false
+  batch_size: 16
+  virtual_batch_size: 16
   # DP params
   # under model because I didn't want to overwrite the trainer class 
   # to include these arguments. I can access the params via the model 
@@ -108,8 +111,8 @@ model:
   dp_tool: "opacus"
   # TODO: with dp_tool this is probably not necessary anymore
   dp: true
-  L2_clip: 1.0
-  noise_multiplier: 0.75
+  L2_clip: 4.0
+  noise_multiplier: 0.4
   target_epsilon: 10.0
   abort: true
   target_delta: 1e-5
@@ -122,7 +125,6 @@ data:
   val_split: 0.2
   num_workers: 16
   normalize: true
-  batch_size: 16
   seed: 42
   shuffle: false
   pin_memory: false

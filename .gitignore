@@ -1,3 +1,7 @@
+# assets that shouldn't be synced
+./data
+./models
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]

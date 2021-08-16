@@ -1,19 +1,19 @@
 # general python
 from mmap import MAP_EXECUTABLE
 import os
-import deepee
-from torch.nn.modules.batchnorm import BatchNorm1d
-from torch.optim import lr_scheduler
 import yaml
 from argparse import Namespace
 from typing import Callable, ClassVar, Union, Any, Dict, Type
+import numpy as np
 
 # general ml
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import pytorch_lightning as pl
 from torch.optim import Optimizer
+import pytorch_lightning as pl
+from scipy import stats
+import pandas as pd
 
 # pytorch lightning
 from pytorch_lightning import LightningModule, seed_everything, Trainer
@@ -45,12 +45,29 @@ from opacus import PrivacyEngine, privacy_engine
 from opacus.dp_model_inspector import DPModelInspector
 from opacus.utils import module_modification
 
+# interpretability 
+from captum.attr import (
+    GradientShap,
+    DeepLift,
+    DeepLiftShap,
+    IntegratedGradients,
+    LayerConductance,
+    NeuronConductance,
+    NoiseTunnel,
+)
+
+# visualization
+import matplotlib
+import matplotlib.pyplot as plt
+
 ### MODEL ###
-# TODO: model_surgeon, optimizer, configs checken
 class LitModelDP(LightningModule):
     def __init__(
         self, 
         model_name: str = "resnet18",
+        interm_n_channels: int = 6,
+        end_n_channels: int = 16,
+        kernel_size: int = 3,
         model_surgeon: ModelSurgeon = None,
         data_name: str = "cifar10",
         datamodule_class: Type[LightningDataModule] = None,
@@ -75,6 +92,9 @@ class LitModelDP(LightningModule):
 
         Args:
             model_name: selection of the model
+            ## For SimpleConvNet ##
+
+            ##
             model_surgeon: passed in deepee.ModelSurgeon to make model compatible with DP [deepee]
             data_name: also pass in what data to train on to possibly adapt model 
                        and to also save data as part of hparams for wandb.
@@ -96,14 +116,21 @@ class LitModelDP(LightningModule):
         self.save_hyperparameters()
        
         # select standard torchvision model
-        self.model = get_model(model_name, pretrained, num_classes, data_name)
+        self.model = get_model(
+            model_name, 
+            pretrained, 
+            num_classes, 
+            data_name, 
+            interm_n_channels,
+            end_n_channels,
+            kernel_size
+        )
         # operate - alter the model to be DP compatible if needed
-        # TODO: only temporary resnet18 there
-        if model_surgeon and model_name == "resnet18": 
+        if model_surgeon: 
             self.model = model_surgeon.operate(self.model)
 
         # TODO: only temp., do the same as for deepee
-        if model_name == "resnet18" and dp_tool == "opacus": 
+        if model_name == "resnet18" and dp_tool == "opacus" and dp: 
             self.model = module_modification.convert_batchnorm_modules(self.model)
             # test whether model is DP compatible
             inspector = DPModelInspector()
@@ -194,7 +221,7 @@ class LitModelDP(LightningModule):
                 **self.hparams.opt_kwargs,
             )
 
-        if self.hparams.dp_tool=='opacus':
+        if self.hparams.dp_tool=='opacus' and self.hparams.dp:
             self.privacy_engine.attach(optimizer)
 
         optims.update({'optimizer': optimizer})
@@ -229,14 +256,14 @@ class LightningCLI_Custom(LightningCLI):
         """Hook to run some code before fit is started"""
         # possible because self.datamodule and self.model are instantiated beforehand
         # in LightningCLI.instantiate_trainer(self) -- see docs
-        
+
         # TODO: why do I have to call them explictly here 
         #       -- in docs not mentioned (not found in .trainerfit())
         self.datamodule.prepare_data()
         self.datamodule.setup() 
         
         # TODO: why did i write this here????
-        # self.model.datamodule = self.datamodule
+        self.model.datamodule = self.datamodule
 
         if self.model.hparams.dp:
             if self.model.hparams.dp_tool == "deepee":
@@ -278,6 +305,7 @@ class LightningCLI_Custom(LightningCLI):
                     # NOTE: either 'epochs' or 'noise_multiplier' can be specified.
                     # If noise_multiplier is not specified, (target_epsilon, target_delta, epochs) 
                     # is used to calculate it.
+                    #epochs=self.trainer.max_epochs,
                     noise_multiplier=self.model.hparams.noise_multiplier,
                     max_grad_norm=self.model.hparams.L2_clip,
                 ).to("cuda:0" if self.trainer.gpus else "cpu")
@@ -304,6 +332,26 @@ class LightningCLI_Custom(LightningCLI):
         
             # TODO: track gradients, etc. --> exceeds maximum metric data size per step
             #self.trainer.logger.experiment.watch(self.model)
+
+    def after_fit(self) -> None:
+        # TODO: this could also be done before the run 
+        # TODO: made only for resnet18 at the moment
+        # TODO: probably include as extra module, script where files are uploaded to 
+        # the respective wandb run afterwards.
+        if self.model.hparams.model_name == "resnet18" and False:
+            # Check last layer of ResNet18 for now
+            cond = LayerConductance(self.model.model, self.model.model.fc)
+            # TODO: for now simply get first image in dataset
+            #test_input_tensor, _ = self.datamodule.dataset_train[0]
+            test_input_tensor = torch.rand([64, 1, 3, 3])
+            cond_vals = cond.attribute(test_input_tensor,target=1)
+            cond_vals = cond_vals.detach().numpy()
+            visualize_importances(
+                range(10),
+                np.mean(cond_vals, axis=0),
+                title="Average Neuron Importances", 
+                axis_title="Neurons"
+            )
     
 # TODO: better option: directly include as meta data to saved, trained model-weights
 # rather overwrite: pytorch_lightning.callbacks.ModelCheckpoint
@@ -355,6 +403,29 @@ class SaveConfigCallbackWandB(Callback):
 
 ### TRAINER ###
 # for now standard class "Trainer" is used (by default)
+
+### INTERPRETABILITY ###
+# TODO: change this function to create a plot on wandb (should be possible natively)
+# NOTE: see work in after_fit() function
+# from: https://captum.ai/tutorials/Titanic_Basic_Interpret
+# Helper method to print importances and visualize distribution
+def visualize_importances(
+    feature_names, 
+    importances, 
+    title="Average Feature Importances", 
+    plot=True, 
+    axis_title="Features"
+):
+    print(title)
+    for i in range(len(feature_names)):
+        print(feature_names[i], ": ", '%.3f'%(importances[i]))
+    x_pos = (np.arange(len(feature_names)))
+    if plot:
+        plt.figure(figsize=(12,6))
+        plt.bar(x_pos, importances, align='center')
+        plt.xticks(x_pos, feature_names, wrap=True)
+        plt.xlabel(axis_title)
+        plt.title(title)
 
 cli = LightningCLI_Custom(
     model_class=LitModelDP, 

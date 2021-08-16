@@ -113,6 +113,7 @@ class LitDataModuleDP(MNISTDataModule, FashionMNISTDataModule, CIFAR10DataModule
 class CIFAR10DataModuleDP(CIFAR10DataModule):
     """
     This is based on the preconfigured torchvision datamodules (e.g. CIFAR10DataModule)
+    CIFAR10 = 60K, 32x32 colour images in 10 classes equally distributed. 50K training, 10K test.
     """
     def __init__(
         self,
@@ -212,7 +213,8 @@ class CIFAR10DataModuleDP(CIFAR10DataModule):
 
 class MNISTDataModuleDP(MNISTDataModule):
     """
-    This is based on the preconfigured torchvision datamodules (e.g. CIFAR10DataModule)
+    This is based on the preconfigured torchvision datamodules (e.g. MNISTDataModule).
+    MNIST = 70K 28x28 grayscale images. 60K training, 10K test. 
     """
     def __init__(
         self,

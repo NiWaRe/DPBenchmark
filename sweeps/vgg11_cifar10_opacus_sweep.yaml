@@ -1,0 +1,88 @@
+# NOTE: https://github.com/wandb/client/issues/1323
+# if boolean param should be included and problems with PyTorch Lightning arise. 
+# NOTE: wandb can AUTO-GENERATE a sweep config file from past experiments (very useful).
+method: bayes
+metric:
+  goal: minimize
+  name: val_loss
+parameters:
+  config: 
+    distribution: categorical 
+    values: 
+      - configs.yaml
+  model.L2_clip:
+    distribution: uniform
+    max: 20
+    min: 0.5
+  # abort: "true"
+  model.batch_size:
+    distribution: int_uniform
+    max: 32
+    min: 8
+  # data_name: "cifar10"
+  # datamodule_class: None
+  # deterministic: "true"
+  # dp: "true"
+  # fallback_to_rdp: "false"
+  # gpus: 1
+  model.lr_scheduler:
+    distribution: categorical
+    values:
+    - "true"
+    - "false"
+  trainer.max_epochs:
+    distribution: int_uniform
+    max: 100
+    min: 10
+  # model_name: "vgg11"
+  # model.model_surgeon:
+  #   distribution: categorical
+  #   values:
+  #   - <deepee.surgery.ModelSurgeon object at 0x7eff8150d970>
+  #   - <deepee.surgery.ModelSurgeon object at 0x7f8d6147ae50>
+  #   - <deepee.surgery.ModelSurgeon object at 0x7efbb4f3f1c0>
+  #   - <deepee.surgery.ModelSurgeon object at 0x7f1547af3400>
+  #   - <deepee.surgery.ModelSurgeon object at 0x7f028e51a190>
+  #   - <deepee.surgery.ModelSurgeon object at 0x7fec908affd0>
+  #   - <deepee.surgery.ModelSurgeon object at 0x7fb0cdea70a0>
+  #   - <deepee.surgery.ModelSurgeon object at 0x7ff71f3ff430>
+  #   - <deepee.surgery.ModelSurgeon object at 0x7f763c6eb6a0>
+  #   - <deepee.surgery.ModelSurgeon object at 0x7f7538d63430>
+  model.noise_multiplier:
+    distribution: uniform
+    max: 5
+    min: 0.05
+  # num_classes:
+  #   distribution: int_uniform
+  #   max: 20
+  #   min: 5
+  # opt_kwargs:
+  #   distribution: categorical
+  #   values:
+  #   - '[{''lr'': 0.05}'
+  #   - '{''momentum'': 0.0}'
+  #   - '{''weight_decay'': 0.0}]'
+  # TODO: incorporate?
+  # model.opt_kwargs.lr:
+  #   distribution: uniform
+  #   max: 0.1
+  #   min: 0.025
+  model.optimizer:
+    distribution: categorical
+    values:
+    - sgd
+    # - adam
+  # pretrained:
+  #   distribution: categorical
+  #   values:
+  #   - "true"
+  #   - "false"
+  model.target_delta:
+    distribution: uniform
+    max: 2e-05
+    min: 5e-06
+  model.target_epsilon:
+    distribution: uniform
+    max: 100
+    min: 10
+program: trainer.py

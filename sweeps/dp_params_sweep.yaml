@@ -1,4 +1,4 @@
-project: dp_benchmark
+project: dp_performances
 method: bayes
 metric:
   goal: minimize
@@ -10,16 +10,17 @@ parameters:
       - configs.yaml
   model.L2_clip:
     distribution: uniform
-    max: 20
+    max: 5.0
     min: 0.5
-  model.batch_size:
-    distribution: int_uniform
-    max: 32
-    min: 8
   model.noise_multiplier:
     distribution: uniform
-    max: 5
-    min: 0.05
+    # typical range according to opacus: https://opacus.ai/docs/faq
+    max: 2.0
+    min: 0.1
+  # model.batch_size:
+  #   distribution: int_uniform
+  #   max: 32
+  #   min: 8
   # NOTE: uncomment if this should be considered
   # trainer.max_epochs:
   #   distribution: int_uniform

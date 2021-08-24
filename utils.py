@@ -32,7 +32,7 @@ def BN_to_LN(
 ) -> nn.Module:
     return SurgicalProcedures.BN_to_LN(module, normalized_shape)
 
-# to make datamodules are available as part of a module,
+# to make datamodules available as part of a module,
 # so that they can be passed to LightningDataModule types from the configs.yaml
 def MNISTDataModuleDPClass():
     return MNISTDataModuleDP

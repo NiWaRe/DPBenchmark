@@ -13,20 +13,30 @@ trainer:
   # simply replace everything with a bool 'true' to use TensorBoard
   logger: 
     class_path: pytorch_lightning.loggers.WandbLogger
-    init_args:
-      project: 'raw_performances'
-      # TODO: automate this 
-      name: 'simple_conv_cifar10_dp_opacus'
-      log_model: true
+    # NOTE: commented out for sweep
+    # init_args:
+    #   project: 'dp_performances'
+    #   # TODO: automate this 
+    #   name: 'deep_small_conv_cifar10'
+    #   log_model: true
   checkpoint_callback: true
   callbacks: 
-    - class_path: pytorch_lightning.callbacks.ModelCheckpoint
-      init_args:
-        monitor: 'val_loss'
+    # NOTE: uncomment for model saving
+    # - class_path: pytorch_lightning.callbacks.ModelCheckpoint
+    #   init_args:
+    #     monitor: 'val_loss'
     - class_path: pytorch_lightning.callbacks.EarlyStopping
       init_args:
-        patience: 10
+        patience: 5
         monitor: 'val_loss'
+    # NOTE: too "slow" -- only stops after 1 epoch and there are just the central 
+    # training configs "check_val_every_n_epoch" and "val_check_interval" that would
+    # apply to validation checks (we don't want to validate after every step).
+    # - class_path: pytorch_lightning.callbacks.EarlyStopping
+    #   init_args:
+    #     divergence_threshold: 10.0
+    #     monitor: 'spent_epsilon'
+
     # NOTE: comment this out if lr_scheduler is set to False    
     # - class_path: pytorch_lightning.callbacks.LearningRateMonitor
     #   init_args:
@@ -86,11 +96,11 @@ trainer:
   stochastic_weight_avg: false
 model:
   # possible models: see model.py
-  model_name: 'resnet18'
+  # resnet18, vgg11, simple_conv
+  model_name: 'vgg11'
   # for SimpleConvNet
-  interm_n_channels: 6
-  end_n_channels: 16
-  kernel_size: 8
+  kernel_size: 3
+  conv_layers: [8, 16, 32, 64]
   # NOTE: this is only relevant for the deepee DP tool
   # possible surgeries: see surgery.py
   # NOTE: chnage model_surgeon to 'None' if not needed
@@ -118,8 +128,17 @@ model:
   dp: true
   # NOTE: std of 0.1 yields good performance, >=0.2 not so good. vgg11 cifar10
   # why doesn't stop after eps>target_epsilon? (patience stops for now -- 50 now)
-  L2_clip: 8.997
-  noise_multiplier: 0.086
+
+# TODO: 
+  # TODO: val_acc = 0 am Anfang?
+  # first check if everyting works, then without dp, with dp no constrain, with dp with constrain
+  # check whether adaptive cnn works ...
+  # why are params being shown double in wandb?
+  # TODO: CELoss directly without manual logsoftmax
+  # TODO: Epoch definition the same DP-SGD paper?
+
+  L2_clip: 20.0
+  noise_multiplier: 0.01
   target_epsilon: 10.0
   abort: true
   target_delta: 1e-5

@@ -3,7 +3,7 @@ from mmap import MAP_EXECUTABLE
 import os
 import yaml
 from argparse import Namespace
-from typing import Callable, ClassVar, Union, Any, Dict, Type
+from typing import Callable, ClassVar, Union, Any, Dict, Type, List
 import numpy as np
 
 # general ml
@@ -22,6 +22,7 @@ from pytorch_lightning.callbacks import Callback
 from torch.optim.lr_scheduler import OneCycleLR
 from torch.optim.swa_utils import AveragedModel, update_bn
 from pytorch_lightning.core.datamodule import LightningDataModule
+from pytorch_lightning.utilities.types import STEP_OUTPUT
 
 # data
 from data import LitDataModuleDP, CIFAR10DataModule, CIFAR10DataModuleDP, MNISTDataModuleDP
@@ -65,9 +66,8 @@ class LitModelDP(LightningModule):
     def __init__(
         self, 
         model_name: str = "resnet18",
-        interm_n_channels: int = 6,
-        end_n_channels: int = 16,
         kernel_size: int = 3,
+        conv_layers: List[int] = [64, 32, 16],
         model_surgeon: ModelSurgeon = None,
         data_name: str = "cifar10",
         datamodule_class: Type[LightningDataModule] = None,
@@ -93,7 +93,8 @@ class LitModelDP(LightningModule):
         Args:
             model_name: selection of the model
             ## For SimpleConvNet ##
-
+            kernel_size: kernel size for conv layers
+            n_conv_layers: array consisting of numbers of feature maps
             ##
             model_surgeon: passed in deepee.ModelSurgeon to make model compatible with DP [deepee]
             data_name: also pass in what data to train on to possibly adapt model 
@@ -121,9 +122,8 @@ class LitModelDP(LightningModule):
             pretrained, 
             num_classes, 
             data_name, 
-            interm_n_channels,
-            end_n_channels,
-            kernel_size
+            kernel_size,
+            conv_layers
         )
         # operate - alter the model to be DP compatible if needed
         if model_surgeon: 
@@ -132,14 +132,13 @@ class LitModelDP(LightningModule):
         # TODO: only temp., do the same as for deepee
         if model_name == "resnet18" and dp_tool == "opacus" and dp: 
             self.model = module_modification.convert_batchnorm_modules(self.model)
-            # test whether model is DP compatible
-            inspector = DPModelInspector()
-            inspector.validate(self.model)
 
         # DeePee: model init.
         if dp:
             # DeePee: disable automatic optimization, to be able to add noise
             self.automatic_optimization = False
+            if dp_tool == "opacus": 
+                self.privacy_engine = None
 
     def forward(self, x):
         out = self.model(x)
@@ -166,17 +165,24 @@ class LitModelDP(LightningModule):
                 # then aggregated to the next opt.step(). Use self.hparams.n_accumulation_steps
                 opt.step()
                 # TODO: do smt with best_alpha
-                self.model.current_epsilon, best_alpha = opt.privacy_engine.get_privacy_spent(
+                spent_epsilon, best_alpha = opt.privacy_engine.get_privacy_spent(
                     self.hparams.target_delta,
                 )
+                self.log('spent_epsilon', spent_epsilon)
+                # stop if epsilon too big 
+                if spent_epsilon > self.hparams.target_epsilon: 
+                    # tell trainer to stop -- copied from built-in EarlyStopping Callback (see docs)
+                    # stop every ddp process if any world process decides to stop 
+                    should_stop = self.trainer.training_type_plugin.reduce_boolean_decision(True)
+                    self.trainer.should_stop = self.trainer.should_stop or should_stop
+
             elif self.hparams.dp_tool == "deepee":
                 self.model.clip_and_accumulate()
                 self.model.noise_gradient()
                 opt.step()
                 self.model.prepare_next_batch()
-                # self.model.current_epsilon is already property of class
-            
-            self.log('spend_epsilon', self.model.current_epsilon)
+                # self.model.current_epsilon is a property of the class
+                self.log('spent_epsilon', self.model.current_epsilon)
 
             # learning rate scheduler if configured so
             if self.hparams.lr_scheduler:
@@ -291,21 +297,25 @@ class LightningCLI_Custom(LightningCLI):
                 # because at this point model.configure_optimizers() wasn't called yet. 
                 # That's also why we save n_accumulation_steps as a model parameter.
                 sample_rate = self.datamodule.batch_size/len(self.datamodule.dataset_train)
-                self.model.n_accumulation_steps = int(
-                    self.model.hparams.virtual_batch_size/self.model.hparams.batch_size
-                )
+                if self.model.hparams.virtual_batch_size >= self.model.hparams.batch_size: 
+                    self.model.n_accumulation_steps = int(
+                        self.model.hparams.virtual_batch_size/self.model.hparams.batch_size
+                    )
+                else: 
+                    self.model.n_accumulation_steps = 1 # neutral
+                    print("Virtual batch size has to be bigger than real batch size!")
 
                 # NOTE: For multiple GPU support: see PL code. 
                 # For now we only consider shifting to cuda, if there's at least one GPU ('gpus' > 0)
                 self.model.privacy_engine = PrivacyEngine(
                     self.model.model,
                     sample_rate=sample_rate * self.model.n_accumulation_steps,
-                    target_epsilon = self.model.hparams.target_epsilon,
                     target_delta = self.model.hparams.target_delta,
-                    # NOTE: either 'epochs' or 'noise_multiplier' can be specified.
+                    target_epsilon=self.model.hparams.target_epsilon,
+                    # NOTE: either 'epochs' and 'target_epsilon' or 'noise_multiplier' can be specified.
                     # If noise_multiplier is not specified, (target_epsilon, target_delta, epochs) 
                     # is used to calculate it.
-                    #epochs=self.trainer.max_epochs,
+                    # epochs=self.trainer.max_epochs,
                     noise_multiplier=self.model.hparams.noise_multiplier,
                     max_grad_norm=self.model.hparams.L2_clip,
                 ).to("cuda:0" if self.trainer.gpus else "cpu")
@@ -334,6 +344,9 @@ class LightningCLI_Custom(LightningCLI):
             #self.trainer.logger.experiment.watch(self.model)
 
     def after_fit(self) -> None:
+        # TODO: detach PrivacyEngine from optimizer - necessary?
+        #self.model.privacy_engine.detach()
+
         # TODO: this could also be done before the run 
         # TODO: made only for resnet18 at the moment
         # TODO: probably include as extra module, script where files are uploaded to 
@@ -353,6 +366,27 @@ class LightningCLI_Custom(LightningCLI):
                 axis_title="Neurons"
             )
     
+class OpacusEpsilonEarlyStopping(Callback): 
+   
+    def on_train_batch_end(
+        self,
+        trainer: "pl.Trainer",
+        pl_module: "pl.LightningModule",
+        outputs: STEP_OUTPUT,
+        batch: Any,
+        batch_idx: int,
+        dataloader_idx: int,
+    ) -> None:
+        """Called when the train batch ends."""
+        current_epsilon = trainer.model.privacy_engine.get_privacy_spent()
+        if current_epsilon > self.model.privacy_engine.target_epsilon: 
+            # tell trainer to stop -- copied from built-in EarlyStopping Callback
+            # stop every ddp process if any world process decides to stop 
+            should_stop = trainer.training_type_plugin.reduce_boolean_decision(True)
+            trainer.should_stop = trainer.should_stop or should_stop
+            if should_stop:
+                self.stopped_epoch = trainer.current_epoch
+
 # TODO: better option: directly include as meta data to saved, trained model-weights
 # rather overwrite: pytorch_lightning.callbacks.ModelCheckpoint
 # if done --> pass in 'None' for Trainer.save_config_callback 

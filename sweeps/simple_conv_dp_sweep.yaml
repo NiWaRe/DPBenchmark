@@ -1,13 +1,9 @@
-project: dp_performances
+project: dp_benchmark
 method: bayes
 metric:
   goal: minimize
   name: val_loss
 parameters:
-  config: 
-    distribution: categorical 
-    values: 
-      - configs.yaml
   # Simple ConvNet params, see models.py
   model.conv_layers:
     distribution: categorical
@@ -33,17 +29,19 @@ parameters:
   # DP params
   model.L2_clip:
     distribution: uniform
-    max: 8.0
-    min: 0.5
+    # priors from Resnet18 Sweep 1 (wandp project: dp_benchmark) 
+    max: 17.994
+    min: 1.294991734215939
   model.noise_multiplier:
     distribution: uniform
-    # typical range according to opacus: https://opacus.ai/docs/faq
-    max: 2.0
-    min: 0.05
-  # model.batch_size:
-  #   distribution: int_uniform
-  #   max: 32
-  #   min: 8
+    # typical range according to opacus: https://opacus.ai/docs/faq: [2.0, 0.1] 
+    # priors from Resnet18 Sweep 1 (wandp project: dp_benchmark) 
+    max: 3.7
+    min: 0.043
+  model.batch_size:
+    distribution: int_uniform
+    max: 64
+    min: 8
   # NOTE: uncomment if this should be considered
   # trainer.max_epochs:
   #   distribution: int_uniform
@@ -58,3 +56,10 @@ parameters:
   #   max: 100
   #   min: 10
 program: trainer.py
+command:
+  - ${env}
+  - ${interpreter}
+  - ${program}
+  - "--config"
+  - "configs_sweep.yaml"
+  - ${args}

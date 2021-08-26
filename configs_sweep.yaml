@@ -1,3 +1,6 @@
+# NOTE: here all the params that are dynamically fixed in sweep have to be commented out,
+# so that they don't appear twice. 
+
 # STATUS
 # - error likely comes from the fact that no datamodule can be created with the new config
 # - finish putting the data_name or the datamodule_class (what I'm currently trying) in the configs
@@ -133,9 +136,31 @@ model:
   # NOTE: std of 0.1 yields good performance, >=0.2 not so good. vgg11 cifar10
   # why doesn't stop after eps>target_epsilon? (patience stops for now -- 50 now)
 
+# TODO: 
+  # how to not have twice the same params? 
+  # solve problem with checkpoint saving 
+  # start a vgg11 sweep based on manual experiments. (mainly to get a feeling about )
+  
+  # TODO: k=3, channels quadratisch aufbauend. (100K - 5mil mit pytorch summary)
 
-  L2_clip: 1.677 # resnet: 1.677, small_deep_conv: 1.679
-  noise_multiplier: 0.5216 # resnet: 0.5216, small_deep_conv: 0.438
+  # do tests to check whether all models work with dp on but no noise (extra project called test -> for every model we do that)
+  # go through code and make everything easier -- too many manual adjustments in order to switch from model to model or data to data
+  # --> model surgeon was a big problem!!!!!!
+  # check whether adaptive cnn works ...
+  # TODO: CELoss directly without manual logsoftmax
+  # Get vgg11, resnet18, and cnn to decent performance with epsilon under 10
+
+  # ------
+  # finish retrainings based using top10 prios from before. redo small reports. 
+  # think about strategy to validate conv params: same as DPSGD (three different noises and then we check? 
+  #   how do be sure that the performance is because of the model and not the params?)
+  # Do uncertainty robustness plots. (check interpretability knowledge page in notion)
+  # Clean and complete test page
+  # Do exeperiments, READ (how to best tune), experiment, validate, read.
+
+  # NOTE: already set in sweep config
+  # L2_clip: 1.677 
+  # noise_multiplier: 0.5216 
   target_epsilon: 10.0
   abort: true
   target_delta: 1e-5

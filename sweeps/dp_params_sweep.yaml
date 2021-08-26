@@ -1,25 +1,23 @@
-project: dp_performances
+project: dp_benchmark
 method: bayes
 metric:
   goal: minimize
   name: val_loss
 parameters:
-  config: 
-    distribution: categorical 
-    values: 
-      - configs.yaml
   model.L2_clip:
     distribution: uniform
-    max: 5.0
-    min: 0.5
+    # priors from Resnet18 Sweep 1 (wandp project: dp_benchmark) 
+    max: 3.0
+    min: 0.1
   model.noise_multiplier:
     distribution: uniform
-    # typical range according to opacus: https://opacus.ai/docs/faq
+    # typical range according to opacus: https://opacus.ai/docs/faq: [2.0, 0.1] 
+    # priors from Resnet18 Sweep 1 (wandp project: dp_benchmark) 
     max: 2.0
     min: 0.1
   # model.batch_size:
   #   distribution: int_uniform
-  #   max: 32
+  #   max: 64
   #   min: 8
   # NOTE: uncomment if this should be considered
   # trainer.max_epochs:
@@ -35,3 +33,10 @@ parameters:
   #   max: 100
   #   min: 10
 program: trainer.py
+command:
+  - ${env}
+  - ${interpreter}
+  - ${program}
+  - "--config"
+  - "configs_sweep.yaml"
+  - ${args}

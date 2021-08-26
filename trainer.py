@@ -125,13 +125,13 @@ class LitModelDP(LightningModule):
             kernel_size,
             conv_layers
         )
+        # TODO: only temp., change later
         # operate - alter the model to be DP compatible if needed
-        if model_surgeon: 
-            self.model = model_surgeon.operate(self.model)
-
-        # TODO: only temp., do the same as for deepee
-        if model_name == "resnet18" and dp_tool == "opacus" and dp: 
-            self.model = module_modification.convert_batchnorm_modules(self.model)
+        if dp and model_name == "resnet18":
+            if dp_tool == "deepee": 
+                self.model = model_surgeon.operate(self.model)
+            elif dp_tool == "opacus": 
+                self.model = module_modification.convert_batchnorm_modules(self.model)
 
         # DeePee: model init.
         if dp:

@@ -69,6 +69,7 @@ class LitModelDP(LightningModule):
         model_name: str = "resnet18",
         kernel_size: int = 3,
         conv_layers: List[int] = [64, 32, 16],
+        depth: int = 1,
         model_surgeon: ModelSurgeon = None,
         data_name: str = "cifar10",
         datamodule_class: Type[LightningDataModule] = None,
@@ -97,6 +98,10 @@ class LitModelDP(LightningModule):
             kernel_size: kernel size for conv layers
             n_conv_layers: array consisting of numbers of feature maps
             ##
+            ## For DepthConvNet ##
+            kernel_size: kernel size for conv layers
+            depth: how many conv blocks
+            ##
             model_surgeon: passed in deepee.ModelSurgeon to make model compatible with DP [deepee]
             data_name: also pass in what data to train on to possibly adapt model 
                        and to also save data as part of hparams for wandb.
@@ -124,7 +129,8 @@ class LitModelDP(LightningModule):
             num_classes, 
             data_name, 
             kernel_size,
-            conv_layers
+            conv_layers, 
+            depth
         )
         # TODO: only temp., change later
         # operate - alter the model to be DP compatible if needed

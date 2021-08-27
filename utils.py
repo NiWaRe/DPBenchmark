@@ -1,3 +1,4 @@
+import torch
 from torch import nn, Size
 from typing import Union
 
@@ -39,3 +40,20 @@ def MNISTDataModuleDPClass():
     
 def CIFAR10DataModuleDPClass():
     return CIFAR10DataModuleDP
+
+# other utility functions
+def get_grad_norm(model, norm_type=2):
+    parameters = [
+        p for p in model.parameters() if p.grad is not None and p.requires_grad
+    ]
+    if len(parameters) == 0:
+        total_norm = 0.0
+    else:
+        device = parameters[0].grad.device
+        total_norm = torch.norm(
+            torch.stack(
+                [torch.norm(p.grad.detach(), norm_type).to(device) for p in parameters]
+            ),
+            2.0,
+        ).item()
+    return total_norm

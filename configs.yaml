@@ -14,20 +14,19 @@ trainer:
   logger: 
     class_path: pytorch_lightning.loggers.WandbLogger
     # NOTE: commented out for sweep
-    # init_args:
-    #   project: 'dp_benchmark'
-    #   # TODO: automate this 
-    #   name: 'vgg11_cifar10_dp'
+    init_args:
+      project: 'dp_benchmark'
+      # TODO: automate this 
+      name: 'vgg11_cifar10_dp'
       # NOTE: Log checkpoints created by ModelCheckpoint as W&B artifacts. 
       # log_model: true
-  checkpoint_callback: true
+  checkpoint_callback: false
   callbacks: 
-    - class_path: pytorch_lightning.callbacks.ModelCheckpoint
-      init_args:
-        monitor: 'val_loss'
-        # set explicitly so that the wandb logger doesn't save the checkpoints
-        # remove if checkpoints should also be saved. 
-        dirpath: '/home/nico/mt/dp_benchmark/model_checkpoint_dump'
+    # NOTE: to save so that wandb doesn't sync (only syncs what's in the same folder)
+    # - class_path: pytorch_lightning.callbacks.ModelCheckpoint
+    #   init_args:
+    #     monitor: 'val_loss'
+    #     dirpath: '/home/nico/mt/dp_benchmark/model_checkpoint_dump'
     - class_path: pytorch_lightning.callbacks.EarlyStopping
       init_args:
         monitor: 'val_loss'
@@ -46,8 +45,7 @@ trainer:
     #   init_args:
     #     logging_interval: 'step'model.opt_kwargs.lr:
   default_root_dir: null
-  gradient_clip_val: 0.0
-  # TODO: check if this is actually applied!
+  gradient_clip_val: 0.0  
   gradient_clip_algorithm: norm
   process_position: 0
   num_nodes: 1
@@ -58,7 +56,7 @@ trainer:
   log_gpu_memory: null
   progress_bar_refresh_rate: null
   overfit_batches: 0.0
-  track_grad_norm: -1
+  track_grad_norm: -1 # 2 for tracking p2 norm
   check_val_every_n_epoch: 1
   fast_dev_run: false
   accumulate_grad_batches: 1
@@ -129,7 +127,7 @@ model:
   # attribute in the trainer class.
   dp_tool: "opacus"
   # TODO: with dp_tool this is probably not necessary anymore
-  dp: true
+  dp: false
   # NOTE: std of 0.1 yields good performance, >=0.2 not so good. vgg11 cifar10
   # why doesn't stop after eps>target_epsilon? (patience stops for now -- 50 now)
 

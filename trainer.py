@@ -37,6 +37,7 @@ from pytorch_lightning.callbacks import LearningRateMonitor
 from pytorch_lightning.loggers import TensorBoardLogger
 from torchmetrics.functional import accuracy
 from pytorch_lightning.callbacks import ModelCheckpoint, model_checkpoint
+from utils import get_grad_norm
 
 # differential privacy
 from deepee import (PrivacyWrapper, PrivacyWatchdog, UniformDataLoader,
@@ -133,12 +134,14 @@ class LitModelDP(LightningModule):
             elif dp_tool == "opacus": 
                 self.model = module_modification.convert_batchnorm_modules(self.model)
 
-        # DeePee: model init.
-        if dp:
-            # DeePee: disable automatic optimization, to be able to add noise
-            self.automatic_optimization = False
-            if dp_tool == "opacus": 
-                self.privacy_engine = None
+        # disable auto. backward to be able to add noise and track 
+        # the global grad norm (also in the non-dp case, lightning 
+        # only does per param grad tracking)
+        self.automatic_optimization = False
+
+        # Opacus: init attribute 'privacy_engine'
+        if dp and dp_tool == "opacus": 
+            self.privacy_engine = None
 
     def forward(self, x):
         out = self.model(x)
@@ -150,12 +153,33 @@ class LitModelDP(LightningModule):
         loss = F.nll_loss(logits, y)
         self.log('train_loss', loss)
 
-        if self.hparams.dp:
+        # also do non-dp backward manually to track global grad
+        if not self.hparams.dp:
+            opt = self.optimizers()
+            opt.zero_grad()
+
+            self.manual_backward(loss)
+            # log global grad norm 
+            self.log('global grad norm', get_grad_norm(
+                    self.model.wrapped_model
+                    if self.hparams.dp and self.hparams.dp_tool=='deepee'
+                    else self.model, 
+                )
+            )
+            opt.step()
+        else:
             # DeePee: adding the DP procedure
             opt = self.optimizers()
             opt.zero_grad()
             # manual_backward automatically applies scaling, etc.
             self.manual_backward(loss)
+            # log global grad norm 
+            self.log('global grad norm', get_grad_norm(
+                    self.model.wrapped_model
+                    if self.hparams.dp and self.hparams.dp_tool=='deepee'
+                    else self.model, 
+                )
+            )
 
             if self.hparams.dp_tool == "opacus":
                 # NOTE: virtual steps can be taken to do calculations with less memory consumption. 
@@ -340,8 +364,8 @@ class LightningCLI_Custom(LightningCLI):
             # the rest is stored as part of the SaveConfigCallbackWandB
             # (too big to store every metric as part of the above config)
         
-            # TODO: track gradients, etc. --> exceeds maximum metric data size per step
-            #self.trainer.logger.experiment.watch(self.model)
+        # track gradients, etc.
+        self.trainer.logger.experiment.watch(self.model)
 
     def after_fit(self) -> None:
         # TODO: detach PrivacyEngine from optimizer - necessary?

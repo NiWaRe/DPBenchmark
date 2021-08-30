@@ -132,6 +132,7 @@ class LitModelDP(LightningModule):
             conv_layers, 
             depth
         )
+        print(self.model)
         # TODO: only temp., change later
         # operate - alter the model to be DP compatible if needed
         if dp and model_name == "resnet18":

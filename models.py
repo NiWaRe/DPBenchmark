@@ -107,34 +107,39 @@ class DepthConvNet(nn.Module):
         # we fix the number of downsampling (halfing)
         # assumning CIFAR10 32 input dim, results in output dim of 4. 
         max_halfs = 3
-        downsample_every = int((depth+1)/max_halfs)
+        # if depth+1 < 3 then put maxpool behind every block.
+        downsample_every = int((depth+1)/max_halfs) if depth==2 else 1
         # create strides array to equally distribute the 
         # downsampling among conv blocks (dim has to be bigger than kernel size)
         strides = np.zeros(depth+1, dtype=int).tolist()
-        for i in range(max_halfs):
+        for i in range(min(depth+1, max_halfs)):
             strides[i*downsample_every] = 1
 
-        # TODO: implement if depth is smaller than 3? 
-
-        # TODO: THERE'S NO ASYM PADDING! (ALSO CHANGE IN SIMPLECONV)
         # we use 'same' padding with fixed stride=1, dilation=1  
         if (kernel_size-1)%2 == 0:
             # symmetric padding (here '//' doesn't change value, only type)
             same_pad = (kernel_size-1)//2
         else: 
+            print("there is no asym padding in torch 1.8.0 - do own conv2d")
+            # TODO: THERE'S NO ASYM PADDING! (ALSO CHANGE IN SIMPLECONV)
+            # check comment from 'kylemcdonald' https://github.com/pytorch/pytorch/issues/3867
             # asymmetric padding necessary
             same_pad = (kernel_size-1)//2
             same_pad = (same_pad, same_pad+1, same_pad, same_pad+1)
 
         self.conv_layers = nn.Sequential(
             nn.Conv2d(in_channels, 8, kernel_size, padding=same_pad),
-            nn.MaxPool2d(kernel_size=2, stride=2) if strides[0] else nn.Identity(), 
+            nn.MaxPool2d(kernel_size=2, stride=2) 
+            if strides[0] else 
+            nn.MaxPool2d(kernel_size=3, stride=1, padding=1), 
             nn.ReLU(),
             # nn.Sequential expects single elements to be passed in, not a list
             *np.concatenate([
                 [
                     nn.Conv2d(2**i, 2**(i+1), kernel_size, padding=same_pad),
-                    nn.MaxPool2d(kernel_size=2, stride=2) if strides[i-2] else nn.Identity(), 
+                    nn.MaxPool2d(kernel_size=2, stride=2) 
+                    if strides[i-2] else 
+                    nn.MaxPool2d(kernel_size=3, stride=1, padding=1), 
                     nn.ReLU()
                 ] 
                 for i in range(3, 3+depth)
@@ -143,7 +148,8 @@ class DepthConvNet(nn.Module):
 
         # +1 because of extra layer bridging to 8
         # max(4, ...) so that it doesn't drop to 0 (4 bc we set max halfs to 3)
-        self.output_dim = max(4, int(img_dim/(2**(depth+1))))
+        #self.output_dim = max(4, int(img_dim/(2**(depth+1))))
+        self.output_dim = 4
         self.output_channel = 2**(3+depth)
         self.adaptive_pool = nn.AdaptiveAvgPool2d(self.output_dim) # quadratic
 

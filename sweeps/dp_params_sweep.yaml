@@ -7,14 +7,18 @@ parameters:
   model.L2_clip:
     distribution: uniform
     # priors from Resnet18 Sweep 1 (wandp project: dp_benchmark) 
-    max: 3.0
-    min: 0.1
+    max: 12.0 # qualitative average of best run in prev. depth sweep #3.0
+    min: 0.03
   model.noise_multiplier:
     distribution: uniform
     # typical range according to opacus: https://opacus.ai/docs/faq: [2.0, 0.1] 
     # priors from Resnet18 Sweep 1 (wandp project: dp_benchmark) 
-    max: 2.0
-    min: 0.1
+    max: 4.0
+    min: 0.04
+  model.depth: 
+    distribution: int_uniform
+    max: 7
+    min: 1
   # model.batch_size:
   #   distribution: int_uniform
   #   max: 64

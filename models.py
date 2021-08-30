@@ -43,15 +43,15 @@ class SimpleConvNet(nn.Module):
         conv_layers = [in_channels, *conv_layers]
         self.conv_layers = conv_layers
 
-        # TODO: do final theoretical check that this is correct
         # conv layers
         # 'same' padding with fixed stride=1, dilation=1  
-        same_pad = np.ceil((kernel_size-1)/2).astype("int")
-        # if (kernel_size-1)%2 != 0.0:
-        #    same_pad = np.ceil(same_pad).astype("int")
-        # else: 
-        #     # mere casting to int
-        #     same_pad = int(same_pad)
+        if (kernel_size-1)%2 == 0:
+            # symmetric padding (here '//' doesn't change value, only type)
+            same_pad = (kernel_size-1)//2
+        else: 
+            # asymmetric padding necessary
+            same_pad = (kernel_size-1)//2
+            same_pad = (same_pad, same_pad+1, same_pad, same_pad+1)
 
         self.conv_layers = nn.Sequential(
             # nn.Sequential expects single elements to be passed in, not a list
@@ -67,7 +67,6 @@ class SimpleConvNet(nn.Module):
         )
         
         # TODO: adaptive pooling layer, auf 1024, 512
-        # TODO: k=3, channels quadratisch aufbauend. (100K - 5mil mit pytorch summary)
         # dense final layer
         self.fc1 = nn.Linear(self.final_flat_dim, 128)
         self.fc2 = nn.Linear(128, 64)
@@ -105,27 +104,46 @@ class DepthConvNet(nn.Module):
         self.kernel_size = kernel_size
         self.depth = depth
 
+        # we fix the number of downsampling (halfing)
+        # assumning CIFAR10 32 input dim, results in output dim of 4. 
+        max_halfs = 3
+        downsample_every = int((depth+1)/max_halfs)
+        # create strides array to equally distribute the 
+        # downsampling among conv blocks (dim has to be bigger than kernel size)
+        strides = np.zeros(depth+1, dtype=int).tolist()
+        for i in range(max_halfs):
+            strides[i*downsample_every] = 1
+
+        # TODO: implement if depth is smaller than 3? 
+
+        # TODO: THERE'S NO ASYM PADDING! (ALSO CHANGE IN SIMPLECONV)
+        # we use 'same' padding with fixed stride=1, dilation=1  
+        if (kernel_size-1)%2 == 0:
+            # symmetric padding (here '//' doesn't change value, only type)
+            same_pad = (kernel_size-1)//2
+        else: 
+            # asymmetric padding necessary
+            same_pad = (kernel_size-1)//2
+            same_pad = (same_pad, same_pad+1, same_pad, same_pad+1)
+
         self.conv_layers = nn.Sequential(
-            nn.Conv2d(in_channels, 8, kernel_size),
-            nn.MaxPool2d(kernel_size=2, stride=2), 
+            nn.Conv2d(in_channels, 8, kernel_size, padding=same_pad),
+            nn.MaxPool2d(kernel_size=2, stride=2) if strides[0] else nn.Identity(), 
             nn.ReLU(),
             # nn.Sequential expects single elements to be passed in, not a list
             *np.concatenate([
                 [
-                    nn.Conv2d(2**i, 2**(i+1), kernel_size),
-                    nn.MaxPool2d(kernel_size=2, stride=2), 
+                    nn.Conv2d(2**i, 2**(i+1), kernel_size, padding=same_pad),
+                    nn.MaxPool2d(kernel_size=2, stride=2) if strides[i-2] else nn.Identity(), 
                     nn.ReLU()
                 ] 
                 for i in range(3, 3+depth)
             ]).tolist()
         )
 
-        # TODO: necessary? 
         # +1 because of extra layer bridging to 8
-        # max(2, ...) so that it doesn't drop to 0
-        # TODO: max necessary -- we can't half dim every conv block
-        #       should we not half or distribute?
-        self.output_dim = max(2, int(img_dim/(2**(depth+1))))
+        # max(4, ...) so that it doesn't drop to 0 (4 bc we set max halfs to 3)
+        self.output_dim = max(4, int(img_dim/(2**(depth+1))))
         self.output_channel = 2**(3+depth)
         self.adaptive_pool = nn.AdaptiveAvgPool2d(self.output_dim) # quadratic
 

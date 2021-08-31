@@ -76,7 +76,7 @@ class LitModelDP(LightningModule):
         pretrained: bool = False,
         num_classes: int = 10,
         optimizer: str = "sgd",
-        opt_kwargs: dict = {"lr":0.05}, 
+        opt_kwargs: dict = {"lr":0.05},
         lr_scheduler: bool = False,
         batch_size: int = 32,
         virtual_batch_size: int = 32,
@@ -108,7 +108,7 @@ class LitModelDP(LightningModule):
             pretrained: pertrained or not
             num_classes: number of classes
             optimizer: pass in the optimizer to be used
-            lr: init learning rate for optimizer
+            opt_kwargs: optional optim params
             lr_scheduler: whether to use a lr_scheduler or not
             batch_size: set through data subclass in configs
             virtual_batch_size: has to be divisible by batch_size. [opacus]
@@ -215,9 +215,9 @@ class LitModelDP(LightningModule):
                 # self.model.current_epsilon is a property of the class
                 self.log('spent_epsilon', self.model.current_epsilon)
 
-            # learning rate scheduler if configured so
-            if self.hparams.lr_scheduler:
-                self.lr_schedulers().step()
+        # learning rate scheduler if configured so
+        if self.hparams.lr_scheduler:
+            self.lr_schedulers().step()
 
         return loss
 
@@ -265,9 +265,21 @@ class LitModelDP(LightningModule):
 
         # learning rate scheduler
         if self.hparams.lr_scheduler:
-            steps_per_epoch = 45000 // self.hparams.batch_size
+            n_train_samples = 0
+            if self.hparams.data_name=="cifar10":
+                # val-split = 0.2, 50K training samples
+                n_train_samples = 40000
+            elif self.hparams.data_name=="mnist":
+                # val-split = 0.2, 60K training samples
+                n_train_samples = 48000
+            steps_per_epoch = n_train_samples // self.hparams.batch_size
             scheduler_dict = {
-                'scheduler': OneCycleLR(optimizer, 0.1, epochs=self.trainer.max_epochs, steps_per_epoch=steps_per_epoch),
+                'scheduler': OneCycleLR(
+                    optimizer, 
+                    max_lr=0.1, 
+                    epochs=self.trainer.max_epochs, 
+                    steps_per_epoch=steps_per_epoch
+                ),
                 'interval': 'step',
             }
             optims.update({'lr_scheduler': scheduler_dict})

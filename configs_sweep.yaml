@@ -2,8 +2,14 @@ seed_everything: 123
 trainer:
   logger: 
     class_path: pytorch_lightning.loggers.WandbLogger
-  checkpoint_callback: false
+  checkpoint_callback: true
   callbacks: 
+    # NOTE: to save so that wandb doesn't sync (only syncs what's in the same folder)
+    # for now saving at all turn 'checkpoint_callback: false' (above)
+    - class_path: pytorch_lightning.callbacks.ModelCheckpoint
+      init_args:
+        monitor: 'val_acc'
+        dirpath: '/home/nico/mt/dp_benchmark/model_checkpoint_dump'
     - class_path: pytorch_lightning.callbacks.EarlyStopping
       init_args:
         monitor: 'val_loss'
@@ -25,7 +31,7 @@ trainer:
   check_val_every_n_epoch: 1
   fast_dev_run: false
   accumulate_grad_batches: 1
-  max_epochs: 100
+  max_epochs: 15
   min_epochs: null
   max_steps: null
   min_steps: null
@@ -62,6 +68,7 @@ trainer:
   multiple_trainloader_mode: max_size_cycle
   stochastic_weight_avg: false
 model:
+  including_test: false
   # possible models: see model.py
   # resnet18, vgg11, simple_conv, depth_conv
   model_name: 'depth_conv'
@@ -79,12 +86,14 @@ model:
   data_name: 'cifar10'
   # possible optims: sgd, adam
   optimizer: 'sgd'
+  # NOTE: already set in sweep config
   opt_kwargs: 
     lr: 0.05
-    # optional
-    momentum: 0.0
-    weight_decay: 0.0
-  lr_scheduler: false
+  #   # optional
+  #   momentum: 0.0
+  #   weight_decay: 0.0
+  # the learning rate that was used for the sweep.
+  lr_scheduler: true
   batch_size: 32
   virtual_batch_size: 0 # not using at the moment
   dp_tool: "opacus"

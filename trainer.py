@@ -87,7 +87,8 @@ class LitModelDP(LightningModule):
         target_epsilon: float = 10.0,
         abort: bool = False,
         target_delta: float = 1e-5,
-        fallback_to_rdp: bool = False
+        fallback_to_rdp: bool = False, 
+        including_test: bool = False,
     ):
         """
         Wrapper Module to extend normal models defined in models.py to DP
@@ -116,6 +117,7 @@ class LitModelDP(LightningModule):
             dp: whether to train with dp or not
             L2_clip, noise_multiplier,target_epsilon, target_delta: [deepee, opacus]
             abort, callback_to_rdp: [deepee]
+            including_test: whether to test at the end of the run or not.
         """
         super().__init__()
 
@@ -402,6 +404,9 @@ class LightningCLI_Custom(LightningCLI):
         self.trainer.logger.experiment.watch(self.model)
 
     def after_fit(self) -> None:
+        if self.model.hparams.including_test: 
+            self.trainer.test()
+
         # TODO: detach PrivacyEngine from optimizer - necessary?
         #self.model.privacy_engine.detach()
 

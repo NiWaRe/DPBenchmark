@@ -1,8 +1,3 @@
-# STATUS
-# - error likely comes from the fact that no datamodule can be created with the new config
-# - finish putting the data_name or the datamodule_class (what I'm currently trying) in the configs
-# - resnet on mnsit with deepee (no noise) works like a charm, but vgg not at all | resnet on cifar10 not really
-
 # in the subclasses only args can be defined that are also 
 # specified as args in the respective classes passed in to the
 # LightningCLI_Custom. (for the trainer by default: class Trainer)
@@ -17,16 +12,17 @@ trainer:
     init_args:
       project: 'dp_benchmark'
       # TODO: automate this 
-      name: 'depth_conv_cifar10_dp'
+      name: 'depth1_cifar10_opt'
       # NOTE: Log checkpoints created by ModelCheckpoint as W&B artifacts. 
       # log_model: true
-  checkpoint_callback: false
+  checkpoint_callback: true
   callbacks: 
     # NOTE: to save so that wandb doesn't sync (only syncs what's in the same folder)
-    # - class_path: pytorch_lightning.callbacks.ModelCheckpoint
-    #   init_args:
-    #     monitor: 'val_loss'
-    #     dirpath: '/home/nico/mt/dp_benchmark/model_checkpoint_dump'
+    # for now saving at all turn 'checkpoint_callback: false' (above)
+    - class_path: pytorch_lightning.callbacks.ModelCheckpoint
+      init_args:
+        monitor: 'val_acc'
+        dirpath: '/home/nico/mt/dp_benchmark/model_checkpoint_dump'
     - class_path: pytorch_lightning.callbacks.EarlyStopping
       init_args:
         monitor: 'val_loss'
@@ -41,9 +37,9 @@ trainer:
     #     monitor: 'spent_epsilon'
 
     # NOTE: comment this out if lr_scheduler is set to False    
-    # - class_path: pytorch_lightning.callbacks.LearningRateMonitor
-    #   init_args:
-    #     logging_interval: 'step'model.opt_kwargs.lr:
+    - class_path: pytorch_lightning.callbacks.LearningRateMonitor
+      init_args:
+        logging_interval: 'step'
   default_root_dir: null
   gradient_clip_val: 0.0  
   gradient_clip_algorithm: norm
@@ -60,7 +56,7 @@ trainer:
   check_val_every_n_epoch: 1
   fast_dev_run: false
   accumulate_grad_batches: 1
-  max_epochs: 100
+  max_epochs: 15
   min_epochs: null
   max_steps: null
   min_steps: null
@@ -97,13 +93,21 @@ trainer:
   multiple_trainloader_mode: max_size_cycle
   stochastic_weight_avg: false
 model:
+##### CHECKLIST FOR CHANGE #####
+  # 1. Model Name (here)
+  # 2. Model Surgeon (here)
+  # 3. Data Name Change (here)
+  # 4. Change Data in trainer.py
+  # 5. Change name of project
+################################
+  including_test: true
   # possible models: see model.py
   # resnet18, vgg11, simple_conv, depth_conv
   model_name: 'depth_conv'
   # for SimpleConvNet and DepthConvNet
   kernel_size: 3
   conv_layers: [16, 32]
-  depth: 4
+  depth: 1
   # NOTE: this is only relevant for the deepee DP tool
   # possible surgeries: see surgery.py
   # NOTE: comment out if not needed
@@ -116,10 +120,7 @@ model:
   optimizer: 'sgd'
   opt_kwargs: 
     lr: 0.05
-    # optional
-    momentum: 0.0
-    weight_decay: 0.0
-  lr_scheduler: false
+  lr_scheduler: true
   batch_size: 32
   virtual_batch_size: 0 # not using at the moment
   # DP params
@@ -130,10 +131,8 @@ model:
   # TODO: with dp_tool this is probably not necessary anymore
   dp: true
   # NOTE: std of 0.1 yields good performance, >=0.2 not so good. vgg11 cifar10
-  # why doesn't stop after eps>target_epsilon? (patience stops for now -- 50 now)
-
-  L2_clip: 1.677 # resnet: 1.677, small_deep_conv: 1.679
-  noise_multiplier: 0.5216 # resnet: 0.5216, small_deep_conv: 0.438
+  L2_clip: 1.0 # ~ 50% of stationary value (assuming convergence in baseline training)
+  noise_multiplier: 0.4272 # resnet: 0.5216, small_deep_conv: 0.438
   target_epsilon: 10.0
   abort: true
   target_delta: 1e-5

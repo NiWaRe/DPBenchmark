@@ -5,17 +5,25 @@ metric:
   name: val_loss
 parameters:
   # Simple ConvNet params, see models.py
+  # model.conv_layers:
+  #   distribution: categorical
+  #   values: 
+  #     # shallow, small
+  #     - [8, 16]
+  #     # deep, small
+  #     - [8, 16, 32, 64]
+  #     # shallow, big
+  #     - [64, 128]
+  #     # deep, big
+  #     - [64, 128, 256, 512]
+  # Depth ConvNet params, see models.py
   model.conv_layers:
     distribution: categorical
     values: 
-      # shallow, small
       - [8, 16]
-      # deep, small
+      - [8, 16, 32]
       - [8, 16, 32, 64]
-      # shallow, big
-      - [64, 128]
-      # deep, big
-      - [64, 128, 256, 512]
+      - [8, 16, 32, 64, 128]
   # model.kernel_size: 
   #   distribution: categorical
   #   values: 

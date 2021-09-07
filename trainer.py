@@ -19,7 +19,7 @@ import pandas as pd
 from pytorch_lightning import LightningModule, seed_everything, Trainer
 from pytorch_lightning.utilities.cli import LightningCLI, LightningArgumentParser
 from pytorch_lightning.callbacks import Callback
-from torch.optim.lr_scheduler import OneCycleLR
+from torch.optim.lr_scheduler import OneCycleLR, StepLR, ExponentialLR
 from torch.optim.swa_utils import AveragedModel, update_bn
 from pytorch_lightning.core.datamodule import LightningDataModule
 from pytorch_lightning.utilities.types import STEP_OUTPUT
@@ -152,12 +152,12 @@ class LitModelDP(LightningModule):
 
     def forward(self, x):
         out = self.model(x)
-        return F.log_softmax(out, dim=1)
+        return out
 
     def training_step(self, batch, batch_idx):
         x, y = batch
-        logits = F.log_softmax(self.model(x), dim=1)
-        loss = F.nll_loss(logits, y)
+        criterion = nn.CrossEntropyLoss()
+        loss = criterion(self.model(x), y)
         self.log('train_loss', loss)
 
         # also do non-dp backward manually to track global grad
@@ -175,7 +175,6 @@ class LitModelDP(LightningModule):
             )
             opt.step()
         else:
-            # DeePee: adding the DP procedure
             opt = self.optimizers()
             opt.zero_grad()
             # manual_backward automatically applies scaling, etc.
@@ -224,9 +223,10 @@ class LitModelDP(LightningModule):
     # utility function (no pl-hook)
     def evaluate(self, batch, stage=None):
         x, y = batch
-        logits = self(x)
-        loss = F.nll_loss(logits, y)
-        preds = torch.argmax(logits, dim=1)
+        out = self.model(x)
+        criterion = nn.CrossEntropyLoss()
+        loss = criterion(out, y)
+        preds = torch.argmax(out, dim=1)
         acc = accuracy(preds, y)
 
         if stage:
@@ -273,12 +273,27 @@ class LitModelDP(LightningModule):
                 # val-split = 0.2, 60K training samples
                 n_train_samples = 48000
             steps_per_epoch = n_train_samples // self.hparams.batch_size
+            # scheduler_dict = {
+            #     'scheduler': OneCycleLR(
+            #         optimizer, 
+            #         max_lr=0.1, 
+            #         epochs=self.trainer.max_epochs, 
+            #         steps_per_epoch=steps_per_epoch
+            #     ),
+            #     'interval': 'step',
+            # }
+            # scheduler_dict = {
+            #     'scheduler': StepLR(
+            #         optimizer, 
+            #         step_size=10*steps_per_epoch, 
+            #         gamma=0.1, 
+            #     ),
+            #     'interval': 'step',
+            # }
             scheduler_dict = {
-                'scheduler': OneCycleLR(
+                'scheduler': ExponentialLR(
                     optimizer, 
-                    max_lr=0.1, 
-                    epochs=self.trainer.max_epochs, 
-                    steps_per_epoch=steps_per_epoch
+                    gamma=0.1, 
                 ),
                 'interval': 'step',
             }
@@ -358,8 +373,8 @@ class LightningCLI_Custom(LightningCLI):
                     # NOTE: either 'epochs' and 'target_epsilon' or 'noise_multiplier' can be specified.
                     # If noise_multiplier is not specified, (target_epsilon, target_delta, epochs) 
                     # is used to calculate it.
-                    # epochs=self.trainer.max_epochs,
-                    noise_multiplier=self.model.hparams.noise_multiplier,
+                    epochs=self.trainer.max_epochs,
+                    #noise_multiplier=self.model.hparams.noise_multiplier,
                     max_grad_norm=self.model.hparams.L2_clip,
                 ).to("cuda:0" if self.trainer.gpus else "cpu")
                 print(f"Noise Multiplier: {self.model.privacy_engine.noise_multiplier}")

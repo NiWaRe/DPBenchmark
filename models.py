@@ -49,6 +49,8 @@ class SimpleConvNet(nn.Module):
             # symmetric padding (here '//' doesn't change value, only type)
             same_pad = (kernel_size-1)//2
         else: 
+            # TODO: THERE'S NO ASYM PADDING! (ALSO CHANGE IN SIMPLECONV)
+            # check comment from 'kylemcdonald' https://github.com/pytorch/pytorch/issues/3867
             # asymmetric padding necessary
             same_pad = (kernel_size-1)//2
             same_pad = (same_pad, same_pad+1, same_pad, same_pad+1)
@@ -66,7 +68,7 @@ class SimpleConvNet(nn.Module):
             ]).tolist()
         )
         
-        # TODO: adaptive pooling layer, auf 1024, 512
+        # NOTE: as alternative: adaptive pooling layer, auf 1024, 512
         # dense final layer
         self.fc1 = nn.Linear(self.final_flat_dim, 128)
         self.fc2 = nn.Linear(128, 64)
@@ -108,7 +110,7 @@ class DepthConvNet(nn.Module):
         # assumning CIFAR10 32 input dim, results in output dim of 4. 
         max_halfs = 3
         # if depth+1 < 3 then put maxpool behind every block.
-        downsample_every = int((depth+1)/max_halfs) if depth==2 else 1
+        downsample_every = int((depth+1)/max_halfs) if depth>=2 else 1
         # create strides array to equally distribute the 
         # downsampling among conv blocks (dim has to be bigger than kernel size)
         strides = np.zeros(depth+1, dtype=int).tolist()

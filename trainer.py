@@ -284,21 +284,22 @@ class LitModelDP(LightningModule):
             #     ),
             #     'interval': 'step',
             # }
-            # scheduler_dict = {
-            #     'scheduler': StepLR(
-            #         optimizer, 
-            #         step_size=10*steps_per_epoch, 
-            #         gamma=0.1, 
-            #     ),
-            #     'interval': 'step',
-            # }
+            nr_epochs = 1
             scheduler_dict = {
-                'scheduler': ExponentialLR(
+                'scheduler': StepLR(
                     optimizer, 
-                    gamma=0.1, 
+                    step_size=nr_epochs*steps_per_epoch, 
+                    gamma=0.7, 
                 ),
                 'interval': 'step',
             }
+            # scheduler_dict = {
+            #     'scheduler': ExponentialLR(
+            #         optimizer, 
+            #         gamma=0.7, 
+            #     ),
+            #     'interval': 'step',
+            # }
             optims.update({'lr_scheduler': scheduler_dict})
 
         return optims
@@ -379,6 +380,9 @@ class LightningCLI_Custom(LightningCLI):
                     #noise_multiplier=self.model.hparams.noise_multiplier,
                     max_grad_norm=self.model.hparams.L2_clip,
                 ).to("cuda:0" if self.trainer.gpus else "cpu")
+                # necessary if noise_multiplier is dynamically calculated by opacus
+                # in order to ensure that the param is tracked
+                self.model.hparams.noise_multiplier = self.model.privacy_engine.noise_multiplier
                 print(f"Noise Multiplier: {self.model.privacy_engine.noise_multiplier}")
 
             else: 

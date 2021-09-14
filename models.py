@@ -3,6 +3,7 @@ from typing import List
 
 # general ml
 import numpy as np
+import timm
 
 # torch 
 from torch.utils import data
@@ -182,13 +183,16 @@ def get_model(
     model = None
     in_channels = None
     img_dim = None
+    output_classes = None
     # adapt input channel number based on dataset
     if data_name=="cifar10":
         in_channels = 3
         img_dim = 32
+        output_classes = 10
     elif data_name=="mnist":
         in_channels = 1
         img_dim = 28
+        output_classes = 10
     # choose model
     if name=="simple_conv": 
         model = SimpleConvNet(in_channels, img_dim, kernel_size, conv_layers)
@@ -202,6 +206,16 @@ def get_model(
         model = torchvision.models.vgg11(pretrained=pretrained, num_classes=num_classes)
         model.features[0] = nn.Conv2d(in_channels, 64, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), bias=False)
         model.features[2] = nn.Identity()
+    # by default a timm model is created
+    else: 
+        # TODO: try out different pretrainings 
+        # TODO check that batchnorm and data normalization works fine.
+        model = timm.create_model(name, pretrained=True, num_classes=10)
+        # freezing model params
+        # for param in model.parameters():
+        #     param.requires_grad = False
+        # adding new classifier which is trained
+        # model.classifier = nn.Linear(1280, output_classes)
 
     # TODO: surgical procedures have to be done automatically depending on model.
     #model = ModelSurgeon(SurgicalProcedures.BN_to_GN).operate(model)

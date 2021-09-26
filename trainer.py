@@ -134,14 +134,18 @@ class LitModelDP(LightningModule):
             conv_layers, 
             depth
         )
-        print(self.model)
-        # TODO: only temp., change later
+        # TODO: only temp., change later (CHECK WHEN ONLY FOR DP WHEN ALWAYS)
         # operate - alter the model to be DP compatible if needed
-        if dp and model_name == "resnet18":
+        if dp: # and (model_name == "resnet18" or model_name == "efficientnet_b7"):
             if dp_tool == "deepee": 
                 self.model = model_surgeon.operate(self.model)
             elif dp_tool == "opacus": 
-                self.model = module_modification.convert_batchnorm_modules(self.model)
+                self.model = module_modification.convert_batchnorm_modules(
+                    model=self.model, 
+                    converter=module_modification._batchnorm_to_groupnorm,
+                )
+
+        print(self.model)
 
         # disable auto. backward to be able to add noise and track 
         # the global grad norm (also in the non-dp case, lightning 
@@ -195,7 +199,14 @@ class LitModelDP(LightningModule):
                 # more memory consuption do an opt.step() and an opt.virtual_step() alternating. 
                 # opt.step() does a real step and opt.virtual_step() only aggregates gradients which are
                 # then aggregated to the next opt.step(). Use self.hparams.n_accumulation_steps
-                opt.step()
+                if (
+                    self.trainer.global_step % self.hparams.n_accumulation_steps
+                ) != 0 or (
+                    self.trainer.global_step
+                ) == self.hparams.steps_per_epoch:
+                    opt.step()
+                else:
+                    opt.virtual_step()
                 # TODO: do smt with best_alpha
                 spent_epsilon, best_alpha = opt.privacy_engine.get_privacy_spent(
                     self.hparams.target_delta,
@@ -274,7 +285,7 @@ class LitModelDP(LightningModule):
             elif self.hparams.data_name=="mnist":
                 # val-split = 0.2, 60K training samples
                 n_train_samples = 48000
-            steps_per_epoch = n_train_samples // self.hparams.batch_size
+            self.hparams.steps_per_epoch = n_train_samples // self.hparams.batch_size
             # scheduler_dict = {
             #     'scheduler': OneCycleLR(
             #         optimizer, 
@@ -288,7 +299,7 @@ class LitModelDP(LightningModule):
             scheduler_dict = {
                 'scheduler': StepLR(
                     optimizer, 
-                    step_size=nr_epochs*steps_per_epoch, 
+                    step_size=nr_epochs*self.hparams.steps_per_epoch, 
                     gamma=0.7, 
                 ),
                 'interval': 'step',
@@ -359,18 +370,18 @@ class LightningCLI_Custom(LightningCLI):
                 # That's also why we save n_accumulation_steps as a model parameter.
                 sample_rate = self.datamodule.batch_size/len(self.datamodule.dataset_train)
                 if self.model.hparams.virtual_batch_size >= self.model.hparams.batch_size: 
-                    self.model.n_accumulation_steps = int(
+                    self.model.hparams.n_accumulation_steps = int(
                         self.model.hparams.virtual_batch_size/self.model.hparams.batch_size
                     )
                 else: 
-                    self.model.n_accumulation_steps = 1 # neutral
+                    self.model.hparams.n_accumulation_steps = 1 # neutral
                     print("Virtual batch size has to be bigger than real batch size!")
 
                 # NOTE: For multiple GPU support: see PL code. 
                 # For now we only consider shifting to cuda, if there's at least one GPU ('gpus' > 0)
                 self.model.privacy_engine = PrivacyEngine(
                     self.model.model,
-                    sample_rate=sample_rate * self.model.n_accumulation_steps,
+                    sample_rate=sample_rate * self.model.hparams.n_accumulation_steps,
                     target_delta = self.model.hparams.target_delta,
                     target_epsilon=self.model.hparams.target_epsilon,
                     # NOTE: either 'epochs' and 'target_epsilon' or 'noise_multiplier' can be specified.
@@ -445,14 +456,15 @@ class OpacusEpsilonEarlyStopping(Callback):
         dataloader_idx: int,
     ) -> None:
         """Called when the train batch ends."""
-        current_epsilon = trainer.model.privacy_engine.get_privacy_spent()
-        if current_epsilon > self.model.privacy_engine.target_epsilon: 
-            # tell trainer to stop -- copied from built-in EarlyStopping Callback
-            # stop every ddp process if any world process decides to stop 
-            should_stop = trainer.training_type_plugin.reduce_boolean_decision(True)
-            trainer.should_stop = trainer.should_stop or should_stop
-            if should_stop:
-                self.stopped_epoch = trainer.current_epoch
+        if trainer.model.hparams.dp:
+            current_epsilon = trainer.model.privacy_engine.get_privacy_spent()
+            if current_epsilon > self.model.privacy_engine.target_epsilon: 
+                # tell trainer to stop -- copied from built-in EarlyStopping Callback
+                # stop every ddp process if any world process decides to stop 
+                should_stop = trainer.training_type_plugin.reduce_boolean_decision(True)
+                trainer.should_stop = trainer.should_stop or should_stop
+                if should_stop:
+                    self.stopped_epoch = trainer.current_epoch
 
 # TODO: better option: directly include as meta data to saved, trained model-weights
 # rather overwrite: pytorch_lightning.callbacks.ModelCheckpoint

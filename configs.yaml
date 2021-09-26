@@ -10,9 +10,9 @@ trainer:
     class_path: pytorch_lightning.loggers.WandbLogger
     # NOTE: commented out for sweep
     init_args:
-      project: 'dp_benchmark'
+      project: 'baseline'
       # TODO: automate this 
-      name: 'depth1_cifar10_opt'
+      name: 'p_efficientnet_b0_GN_unfrozen_extractor'
       # NOTE: Log checkpoints created by ModelCheckpoint as W&B artifacts. 
       # log_model: true
   checkpoint_callback: true
@@ -27,6 +27,7 @@ trainer:
       init_args:
         monitor: 'val_loss'
         patience: 15
+        mode: 'min'
         divergence_threshold: 1000.0 
     # NOTE: too "slow" -- only stops after 1 epoch and there are just the central 
     # training configs "check_val_every_n_epoch" and "val_check_interval" that would
@@ -56,7 +57,7 @@ trainer:
   check_val_every_n_epoch: 1
   fast_dev_run: false
   accumulate_grad_batches: 1
-  max_epochs: 15
+  max_epochs: 100
   min_epochs: null
   max_steps: null
   min_steps: null
@@ -103,11 +104,25 @@ model:
   including_test: true
   # possible models: see model.py
   # resnet18, vgg11, simple_conv, depth_conv
-  model_name: 'depth_conv'
+  # any other model is tried to be created from the timm library
+  model_name: 'efficientnet_b7'
   # for SimpleConvNet and DepthConvNet
   kernel_size: 3
   conv_layers: [16, 32]
-  depth: 1
+  depth: 7
+  data_name: 'cifar10'
+  # possible optims: sgd, adam
+  optimizer: 'sgd'
+  opt_kwargs: 
+    lr: 0.05
+  lr_scheduler: true
+  batch_size: 16
+  virtual_batch_size: 32 # not using at the moment
+  # DP params
+  # under model because I didn't want to overwrite the trainer class 
+  # to include these arguments. I can access the params via the model 
+  # attribute in the trainer class.
+  dp_tool: "opacus"
   # NOTE: this is only relevant for the deepee DP tool
   # possible surgeries: see surgery.py
   # NOTE: comment out if not needed
@@ -115,24 +130,11 @@ model:
   #   class_path: deepee.ModelSurgeon
   #   init_args:
   #     converter: utils.BN_to_GN
-  data_name: 'cifar10'
-  # possible optims: sgd, adam
-  optimizer: 'sgd'
-  opt_kwargs: 
-    lr: 0.05
-  lr_scheduler: true
-  batch_size: 32
-  virtual_batch_size: 0 # not using at the moment
-  # DP params
-  # under model because I didn't want to overwrite the trainer class 
-  # to include these arguments. I can access the params via the model 
-  # attribute in the trainer class.
-  dp_tool: "opacus"
   # TODO: with dp_tool this is probably not necessary anymore
   dp: true
   # NOTE: std of 0.1 yields good performance, >=0.2 not so good. vgg11 cifar10
   L2_clip: 1.0 # ~ 50% of stationary value (assuming convergence in baseline training)
-  noise_multiplier: 0.4272 # resnet: 0.5216, small_deep_conv: 0.438
+  #noise_multiplier: 0.4272 # resnet: 0.5216, small_deep_conv: 0.438
   target_epsilon: 10.0
   abort: true
   target_delta: 1e-5

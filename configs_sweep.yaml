@@ -1,11 +1,12 @@
+# MAKE SURE WANDB IS ONLINE! (otherwise unique name error)
 seed_everything: 123
 trainer:
   logger: 
     class_path: pytorch_lightning.loggers.WandbLogger
   checkpoint_callback: true
   callbacks: 
-    # NOTE: to save so that wandb doesn't sync (only syncs what's in the same folder)
-    # for now saving at all turn 'checkpoint_callback: false' (above)
+      # NOTE: to save so that wandb doesn't sync (only syncs what's in the same folder)
+      # for now saving at all turn 'checkpoint_callback: false' (above)
     - class_path: pytorch_lightning.callbacks.ModelCheckpoint
       init_args:
         monitor: 'val_acc'
@@ -14,7 +15,12 @@ trainer:
       init_args:
         monitor: 'val_loss'
         patience: 15
+        mode: 'min'
         divergence_threshold: 1000.0 
+      # NOTE: comment this out if lr_scheduler is set to False    
+    - class_path: pytorch_lightning.callbacks.LearningRateMonitor
+      init_args:
+        logging_interval: 'step'
   default_root_dir: null
   gradient_clip_val: 0.0
   gradient_clip_algorithm: norm
@@ -71,11 +77,12 @@ model:
   including_test: false
   # possible models: see model.py
   # resnet18, vgg11, simple_conv, depth_conv
-  model_name: 'depth_conv'
+  # any other model is tried to be created from the timm library
+  model_name: 'efficientnet_b7'
   # for SimpleConvNet
   kernel_size: 3
   conv_layers: [16, 32]
-  depth: 5
+  depth: 1
   # NOTE: this is only relevant for the deepee DP tool
   # possible surgeries: see surgery.py
   # NOTE: comment out if not needed
@@ -88,14 +95,14 @@ model:
   optimizer: 'sgd'
   # NOTE: already set in sweep config
   opt_kwargs: 
-    lr: 0.05
+    lr: 0.1
   #   # optional
   #   momentum: 0.0
   #   weight_decay: 0.0
   # the learning rate that was used for the sweep.
   lr_scheduler: true
-  batch_size: 32
-  virtual_batch_size: 0 # not using at the moment
+  batch_size: 16
+  virtual_batch_size: 32 # not using at the moment
   dp_tool: "opacus"
   dp: true
   # NOTE: already set in sweep config

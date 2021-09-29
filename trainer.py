@@ -69,7 +69,9 @@ class LitModelDP(LightningModule):
         model_name: str = "resnet18",
         kernel_size: int = 3,
         conv_layers: List[int] = [64, 32, 16],
-        depth: int = 1,
+        nr_stages: int = 1,
+        depth: float = 1.0, 
+        width: float = 1.0,
         model_surgeon: ModelSurgeon = None,
         data_name: str = "cifar10",
         datamodule_class: Type[LightningDataModule] = None,
@@ -101,7 +103,9 @@ class LitModelDP(LightningModule):
             ##
             ## For DepthConvNet ##
             kernel_size: kernel size for conv layers
-            depth: how many conv blocks
+            nr_stages: how many stages in conv net 
+            depth: factor to determine how many conv blocks per stage
+            width: factor to determine how many filters per conv block 
             ##
             model_surgeon: passed in deepee.ModelSurgeon to make model compatible with DP [deepee]
             data_name: also pass in what data to train on to possibly adapt model 
@@ -132,7 +136,9 @@ class LitModelDP(LightningModule):
             data_name, 
             kernel_size,
             conv_layers, 
-            depth
+            nr_stages,
+            depth, 
+            width
         )
         # TODO: only temp., change later (CHECK WHEN ONLY FOR DP WHEN ALWAYS)
         # operate - alter the model to be DP compatible if needed
@@ -295,7 +301,7 @@ class LitModelDP(LightningModule):
             #     ),
             #     'interval': 'step',
             # }
-            nr_epochs = 1
+            nr_epochs = 10
             scheduler_dict = {
                 'scheduler': StepLR(
                     optimizer, 

@@ -24,10 +24,10 @@ parameters:
   #   max: 64
   #   min: 8
   # NOTE: uncomment if this should be considered
-  # trainer.max_epochs:
-  #   distribution: int_uniform
-  #   max: 100
-  #   min: 10
+  trainer.max_epochs:
+    distribution: int_uniform
+    max: 30
+    min: 15
   # model.target_delta:
   #   distribution: uniform
   #   max: 2e-05

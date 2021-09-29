@@ -76,13 +76,15 @@ trainer:
 model:
   including_test: false
   # possible models: see model.py
-  # resnet18, vgg11, simple_conv, depth_conv
+  # resnet18, vgg11, simple_conv, stage_conv, en_scaling_base_model, efficientnet_b[0-7]
   # any other model is tried to be created from the timm library
-  model_name: 'efficientnet_b7'
-  # for SimpleConvNet
+  model_name: 'en_scaling_base_model'
+  # for SimpleConvNet and DepthConvNet
   kernel_size: 3
   conv_layers: [16, 32]
-  depth: 1
+  nr_stages: 7
+  depth: 2.0
+  width: 3.0
   # NOTE: this is only relevant for the deepee DP tool
   # possible surgeries: see surgery.py
   # NOTE: comment out if not needed

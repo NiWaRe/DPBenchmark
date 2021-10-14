@@ -72,6 +72,7 @@ class LitModelDP(LightningModule):
         nr_stages: int = 1,
         depth: float = 1.0, 
         width: float = 1.0,
+        skip: int = 0,
         model_surgeon: ModelSurgeon = None,
         data_name: str = "cifar10",
         datamodule_class: Type[LightningDataModule] = None,
@@ -101,11 +102,12 @@ class LitModelDP(LightningModule):
             kernel_size: kernel size for conv layers
             n_conv_layers: array consisting of numbers of feature maps
             ##
-            ## For DepthConvNet ##
+            ## For StageConvNet/ENScaling ##
             kernel_size: kernel size for conv layers
             nr_stages: how many stages in conv net 
             depth: factor to determine how many conv blocks per stage
             width: factor to determine how many filters per conv block 
+            skip: int to select the kind of skip connections (see models.py for more info)
             ##
             model_surgeon: passed in deepee.ModelSurgeon to make model compatible with DP [deepee]
             data_name: also pass in what data to train on to possibly adapt model 
@@ -138,7 +140,8 @@ class LitModelDP(LightningModule):
             conv_layers, 
             nr_stages,
             depth, 
-            width
+            width, 
+            skip
         )
         # TODO: only temp., change later (CHECK WHEN ONLY FOR DP WHEN ALWAYS)
         # operate - alter the model to be DP compatible if needed

@@ -9,6 +9,7 @@ import timm
 from torch.utils import data
 import torchvision
 from torch import nn
+import torch.nn.functional as F
 
 # data
 from data import (
@@ -19,6 +20,19 @@ from data import (
 # differential privacy
 from deepee import (PrivacyWrapper, PrivacyWatchdog, UniformDataLoader,
                      ModelSurgeon, SurgicalProcedures, watchdog)
+
+# Utility Modules
+class Lambda(nn.Module):
+    """
+    Module to encapsulate specific functions as modules. 
+    Good to easily integrate squeezing or padding functions.
+    """
+    def __init__(self, func):
+        super().__init__()
+        self.func = func
+
+    def forward(self, x):
+        return self.func(x)
 
 class SimpleConvNet(nn.Module):
     """
@@ -178,18 +192,27 @@ class ENScalingBaseModel(nn.Module):
     ConvNet that is based on stage 1 network of StageConvNet and where
     depth (factor multiplied number of equal size conv blocks) and width 
     (factor multiplied number of channels per conv block) can be changed seperately. 
-    By default depth and width are 1 which results in the stafe 1 network of StafeConvNet.
+    By default depth and width are 1 which results in the stage 1 network of StafeConvNet.
     Args: 
         depth - a factor multiplied with number of conv blocks per stage of base model
         width - a factor multiplied with number of channels per conv block of base model
+        skip - an int that selects what kind of skip connection 
+               - 0 = none,
+               - 1 = skips over stages starting from after the "adapt" block at the beginning
+                 of each stage (the Conv layer with different input and output channels).
     """
     def __init__(
         self, 
         in_channels: int = 3,
         depth: float = 1.0,
         width: float = 1.0,
+        skip: int = 0,
         ):
         super(ENScalingBaseModel, self).__init__()
+        self.depth = depth
+        self.width = width
+        self.skip = skip
+
         ## STAGE 0 ##
         # the stage 1 base model has 8 channels in stage 0
         # the stage 1 base model has 1 conv block per stage (in both stage 0 and 1)
@@ -248,6 +271,29 @@ class ENScalingBaseModel(nn.Module):
             ]).tolist(), 
         )   
 
+        ## SKIP connections ##
+        # fill new channel dimensions with zeros
+        self.skip_zero = Lambda(
+            lambda x: F.pad(
+                x[:, :, ::2, ::2],
+                # from back along dimensions (width_left, width_right, high_left, ...)
+                # we only want to pad the end of the channels dimension
+                (0, 0, 0, 0, 0, width_stage_zero - in_channels),
+                mode="constant", 
+                value=0
+            )
+        )
+        self.skip_one = Lambda(
+            lambda x: F.pad(
+                x[:, :, ::2, ::2],
+                (0, 0, 0, 0, 0, width_stage_one - width_stage_zero),
+                mode="constant", 
+                value=0
+            )
+        )
+        # if channel dimensions stay the same, no padding is necessary
+        #self.skip = nn.Sequential()
+
         ## Final FC Block ##
         # output_dim is fixed to 4 (even if 8 makes more sense for the stage 1 StageConvModel)
         output_dim = 4
@@ -261,8 +307,12 @@ class ENScalingBaseModel(nn.Module):
 
     def forward(self, x):
         batch_size = x.shape[0]
-        out = self.stage_zero(x)
-        out = self.stage_one(out)
+        if self.skip: 
+            out = self.stage_zero(x) + self.skip_zero(x)
+            out = self.stage_one(out) + self.skip_one(out)
+        else: 
+            out = self.stage_zero(x) 
+            out = self.stage_one(out) 
         out = self.adaptive_pool(out)
         out = out.view(batch_size, -1)
         out = self.relu1(self.fc1(out))
@@ -279,7 +329,8 @@ def get_model(
     conv_layers,
     nr_stages, 
     depth, 
-    width) -> nn.Module:
+    width,
+    skip) -> nn.Module:
     model = None
     in_channels = None
     img_dim = None
@@ -300,7 +351,7 @@ def get_model(
         model = StageConvNet(in_channels, img_dim, kernel_size, nr_stages)
     elif name=="en_scaling_base_model":
         # img_dim is assumed to be 32 (but model works also with other img_dim)
-        model = ENScalingBaseModel(in_channels, depth, width)
+        model = ENScalingBaseModel(in_channels, depth, width, skip)
     elif name=="resnet18":
         model = torchvision.models.resnet18(pretrained=pretrained, num_classes=num_classes)
         model.conv1 = nn.Conv2d(in_channels, 64, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), bias=False)
@@ -319,7 +370,7 @@ def get_model(
         #     param.requires_grad = False
         # adding new classifier which is trained
         # NOTE: b0 was 1280, b3 was 1536, b5 was 2048, b7 was 2560
-        model.classifier = nn.Linear(2560, output_classes)
+        model.classifier = nn.Linear(1536, output_classes)
 
     # TODO: surgical procedures have to be done automatically depending on model.
     #model = ModelSurgeon(SurgicalProcedures.BN_to_GN).operate(model)

@@ -83,8 +83,9 @@ model:
   kernel_size: 3
   conv_layers: [16, 32]
   nr_stages: 7
+  skip: 1
   depth: 2.0
-  width: 3.0
+  width: 1.0
   # NOTE: this is only relevant for the deepee DP tool
   # possible surgeries: see surgery.py
   # NOTE: comment out if not needed
@@ -103,8 +104,8 @@ model:
   #   weight_decay: 0.0
   # the learning rate that was used for the sweep.
   lr_scheduler: true
-  batch_size: 16
-  virtual_batch_size: 32 # not using at the moment
+  batch_size: 64 #16
+  virtual_batch_size: 128 #32 # not using at the moment
   dp_tool: "opacus"
   dp: true
   # NOTE: already set in sweep config

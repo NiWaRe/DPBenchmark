@@ -47,7 +47,7 @@ trainer:
   process_position: 0
   num_nodes: 1
   num_processes: 1
-  gpus: 0
+  gpus: 1
   auto_select_gpus: false
   tpu_cores: null
   log_gpu_memory: null

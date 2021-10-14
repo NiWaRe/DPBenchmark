@@ -304,7 +304,7 @@ class LitModelDP(LightningModule):
             #     ),
             #     'interval': 'step',
             # }
-            nr_epochs = 10
+            nr_epochs = 1
             scheduler_dict = {
                 'scheduler': StepLR(
                     optimizer, 

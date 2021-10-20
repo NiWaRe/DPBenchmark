@@ -1,5 +1,6 @@
 # general python 
 from typing import List
+from copy import deepcopy
 
 # general ml
 import numpy as np
@@ -320,6 +321,230 @@ class ENScalingBaseModel(nn.Module):
         out = self.fc3(out)
         return out
 
+# NOTE: Specific features have been designed for CIFAR10 Input specifically
+# NOTE: Difference to Stage 1 Network: Downsampling and channel adaptation
+#       happens in first Conv2d.
+class ResidualBlock(nn.Module):
+    """
+    Inspired by residual learning of ResNet.
+    Main focus is on using residual learning aspect, using identity skip connections
+    (projected connections are not considered), specifics of original paper are not 
+    considered in detail (whether downsampling happens in first or last ConvBlock 
+    per Residual Block - if there's a downsampling at all).
+
+    Specifically geared towards experiments for the stage 1 network of StageConvNet, 
+    which is used as baseline in my manually crafted experiments. Downsampling means
+    halving with same padding specifically for CIFAR10 input. 
+
+    Args:
+        in_channels: the number of channels (feature maps) of the incoming embedding
+        out_channels: the number of channels after the first convolution
+        halve_dim : whether to half the dimension in the last Conv2D
+        after_conv_fc: norm or pooling after Conv2D layer (BatchNorm2d, MaxPool, Identity)
+        skip_depth: how much blocks skip connection should jump,
+            2 = default, 0 = no skip connections
+    """
+
+    def __init__(
+        self, 
+        in_channels : int, 
+        out_channels : int,
+        halve_dim : bool, 
+        after_conv_fc : nn.Module,
+        skip_depth : int = 2,
+    ):
+        super().__init__()
+        # add strides in the skip connection and zeros for the new channels
+        # if output dimension or output channels differ from respective input
+        if halve_dim or in_channels != out_channels:
+            self.skip = Lambda(
+                lambda x: F.pad(
+                    x[:, :, ::2, ::2] if halve_dim else x, # stride = 2 for halving
+                    (0, 0, 0, 0, 0, out_channels - in_channels), 
+                    mode="constant", value=0
+                )
+            )
+        else:
+            self.skip = nn.Sequential()
+
+        # for first layer either add downsampling layer or normal layer
+        # in any case adapt channels 
+        self.conv_layers = nn.ModuleList(
+            [
+                nn.Conv2d(
+                    in_channels, 
+                    out_channels, 
+                    kernel_size = 2 if halve_dim else 3, 
+                    stride = 2 if halve_dim else 1, 
+                    padding = 0 if halve_dim else 1, 
+                    bias=False
+                )
+            ]
+        )
+        
+        # skip_depth decides on how many Conv2d layers one Residual Block has
+        self.conv_layers.extend(
+            [
+                nn.Conv2d(
+                    out_channels, 
+                    out_channels, 
+                    kernel_size=3, 
+                    stride=1, 
+                    padding=1, 
+                    bias=False
+                )
+                for i in range(skip_depth-1)
+            ]
+        )
+
+        # initiate the functions after Conv2d
+        self.after_conv_fcs = nn.ModuleList(
+            [
+                deepcopy(after_conv_fc)
+                for i in range(skip_depth)
+            ]
+        )
+
+        # initiative activation functions
+        self.activation_fcs = nn.ModuleList(
+            [
+                nn.ReLU()
+                for i in range(skip_depth)
+            ]
+        )
+
+    def forward(self, input):
+        # go through all triples expect last one
+        out = input
+        for i in range(len(self.conv_layers)-1):
+            out = self.conv_layers[i](out)
+            out = self.after_conv_fcs[i](out)
+            out = self.activation_fcs[i](out)
+
+        # add last triple and connect input
+        out = self.conv_layers[-1](out)
+        out = self.after_conv_fcs[-1](out) + self.skip(input)
+        out = self.activation_fcs[-1](out)
+
+        return out
+
+class ResidualStack(nn.Module):
+    """
+    Helper module to stack the different residual blocks. 
+    
+    Args:
+        in_channels: The number of channels (feature maps) of the incoming embedding
+        out_channels: The number of channels after the first layer
+        num_blocks: Number of residual blocks
+        stride: Stride size of the first layer, used for downsampling
+    """
+    
+    def __init__(self, in_channels, out_channels, num_blocks, stride):
+        super().__init__()
+        
+        after_conv_fc = nn.BatchNorm2d(out_channels)
+        skip_depth = 2
+
+        # First Layer to get the right number of channels (from previous block to current)
+        self.residual_stack = nn.ModuleList(
+            [
+                ResidualBlock(in_channels, out_channels, False, after_conv_fc, skip_depth)
+            ]
+        )
+        
+        # EXTEND adds array as elements of existing array, APPEND adds array as new element of array 
+        self.residual_stack.extend(
+            [
+                ResidualBlock(out_channels, out_channels, False, after_conv_fc, skip_depth) 
+                if i!=num_blocks-1 else
+                # last layer should downsample (if specified)
+                ResidualBlock(out_channels, out_channels, True, after_conv_fc, skip_depth) 
+                for i in range(1, num_blocks)
+            ]
+        )
+        
+    def forward(self, input):
+        out = input
+        for layer in self.residual_stack:
+            out = layer(out)
+        return out
+
+# NOTE: some differences to my manually crafted CNN (not just added skip connections)
+# Differences i.a.: 
+#   - Downsampling is done with adaption of channels in first ConvBlock 
+#   - No MaxPool layers are used
+#   - BatchNorm layers are used
+class ENScalingResidualModel(nn.Module):
+    """
+    ConvNet that is based on stage 1 network of StageConvNet and where
+    depth (factor multiplied number of equal size conv blocks) and width 
+    (factor multiplied number of channels per conv block) can be changed seperately. 
+    By default depth and width are 1 which results in the stage 1 network of StafeConvNet.
+    In the contrary to the ENScalingBaseModel this model considers residual connections as
+    where implemented in the ResNet (skip connections over two conv blocks with batchnorm
+    without any pooling applied behind the conv layer.)
+    Args: 
+        depth - a factor multiplied with number of conv blocks per stage of base model
+        width - a factor multiplied with number of channels per conv block of base model
+        skip - an int that selects what kind of skip connection 
+               - 0 = none,
+               - 1 = skips over stages starting from after the "adapt" block at the beginning
+                 of each stage (the Conv layer with different input and output channels).
+    """
+    def __init__(
+        self, 
+        in_channels: int = 3,
+        depth: float = 1.0,
+        width: float = 1.0,
+        skip: int = 0,
+        ):
+        super(ENScalingResidualModel, self).__init__()
+        self.depth = depth
+        self.width = width
+        self.skip = skip
+
+        ## STAGE 0 ##
+        # the stage 1 base model has 8 channels in stage 0
+        # the stage 1 base model has 1 conv block per stage (in both stage 0 and 1)
+        width_stage_zero = int(width*8)
+        depth_stage_zero = int(depth*1)
+        self.stage_zero = nn.Sequential(
+            # TODO: think about understanding timm framework to be able to easily load and change 
+            # different mainstream networks -- will be important in any case!
+            ResidualStack(3, width_stage_zero, 2, depth_stage_zero),
+        )
+
+        ## STAGE 1 ##
+        # the stage 1 base model has 16 channels in stage 1
+        # the stage 1 base model has 1 conv block per stage (in both stage 0 and 1)
+        width_stage_one = int(width*16)
+        depth_stage_one = int(depth*1)
+        self.stage_one = nn.Sequential(
+            ResidualStack(width_stage_zero, width_stage_one, 2, depth_stage_one),
+        )   
+
+        ## Final FC Block ##
+        # output_dim is fixed to 4 (even if 8 makes more sense for the stage 1 StageConvModel)
+        output_dim = 4
+        self.adaptive_pool = nn.AdaptiveAvgPool2d(4) 
+
+        self.fc1 = nn.Linear(width_stage_one*output_dim**2, 256)
+        self.fc2 = nn.Linear(256, 128)
+        self.fc3 = nn.Linear(128, 10)
+        self.relu1 = nn.ReLU()
+        self.relu2 = nn.ReLU()
+
+    def forward(self, x):
+        batch_size = x.shape[0]
+        out = self.stage_zero(x) 
+        out = self.stage_one(out) 
+        out = self.adaptive_pool(out)
+        out = out.view(batch_size, -1)
+        out = self.relu1(self.fc1(out))
+        out = self.relu2(self.fc2(out))
+        out = self.fc3(out)
+        return out
+
 def get_model(
     name, 
     pretrained, 
@@ -352,6 +577,9 @@ def get_model(
     elif name=="en_scaling_base_model":
         # img_dim is assumed to be 32 (but model works also with other img_dim)
         model = ENScalingBaseModel(in_channels, depth, width, skip)
+    elif name=="en_scaling_residual_model":
+        # img_dim is assumed to be 32 (but model works also with other img_dim)
+        model = ENScalingResidualModel(in_channels, depth, width, skip)
     elif name=="resnet18":
         model = torchvision.models.resnet18(pretrained=pretrained, num_classes=num_classes)
         model.conv1 = nn.Conv2d(in_channels, 64, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), bias=False)

@@ -12,7 +12,7 @@ trainer:
     init_args:
       project: 'baseline'
       # TODO: automate this 
-      name: 'en_scaling_base_model_d80_w1_skip'
+      name: 'en_scaling_res_model_nonorm_d80_w1'
       # NOTE: Log checkpoints created by ModelCheckpoint as W&B artifacts. 
       # log_model: true
   checkpoint_callback: true
@@ -57,7 +57,7 @@ trainer:
   check_val_every_n_epoch: 1
   fast_dev_run: false
   accumulate_grad_batches: 1
-  max_epochs: 15
+  max_epochs: 100
   min_epochs: null
   max_steps: null
   min_steps: null
@@ -103,9 +103,10 @@ model:
 ################################
   including_test: true
   # possible models: see model.py
-  # resnet18, vgg11, simple_conv, stage_conv, en_scaling_base_model, efficientnet_b[0-7]
+  #   resnet18, vgg11, simple_conv, stage_conv, 
+  #   en_scaling_base_model, en_scaling_residual_model, efficientnet_b[0-7]
   # any other model is tried to be created from the timm library
-  model_name: 'en_scaling_base_model'
+  model_name: 'en_scaling_residual_model'
   # for SimpleConvNet and DepthConvNet
   kernel_size: 3
   conv_layers: [16, 32]

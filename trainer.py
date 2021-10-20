@@ -148,11 +148,13 @@ class LitModelDP(LightningModule):
         if dp: # and (model_name == "resnet18" or model_name == "efficientnet_b7"):
             if dp_tool == "deepee": 
                 self.model = model_surgeon.operate(self.model)
-            elif dp_tool == "opacus": 
-                self.model = module_modification.convert_batchnorm_modules(
-                    model=self.model, 
-                    converter=module_modification._batchnorm_to_groupnorm,
-                )
+            elif dp_tool == "opacus" or True: 
+                # self.model = module_modification.convert_batchnorm_modules(
+                #     model=self.model, 
+                #     converter=module_modification._batchnorm_to_groupnorm,
+                # )
+                # NOTE: change the parameter of group
+                self.model = module_modification.nullify_batchnorm_modules()
 
         print(self.model)
 
@@ -304,7 +306,7 @@ class LitModelDP(LightningModule):
             #     ),
             #     'interval': 'step',
             # }
-            nr_epochs = 1
+            nr_epochs = 10
             scheduler_dict = {
                 'scheduler': StepLR(
                     optimizer, 

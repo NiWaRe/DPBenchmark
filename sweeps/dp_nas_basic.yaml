@@ -1,0 +1,49 @@
+project: dp_benchmark
+method: bayes
+metric:
+  goal: minimize
+  name: val_loss
+parameters:
+  # DP params
+  model.L2_clip:
+    distribution: uniform
+    # priors from Depth ConvNet General Sweep
+    max: 10.0 
+    min: 0.01
+  trainer.max_epochs:
+    distribution: categorical
+    values: 
+    - 15
+    - 30
+  # ConvNet params for 'en_scaling_residual_model'
+  # halve_dim: True
+  after_conv_fc_str: 
+    distribution: categorical
+    values: 
+    - 'max_pool'
+    - 'group_norm'
+    - 'identity'
+    #- 'batch_norm_dp'
+  skip_depth: 
+    distribution: int_uniform
+    # range based on ResNet paper (using 2)
+    max: 4
+    min: 0
+  depth: 
+    distribution: uniform
+    # range from EfficientNet paper
+    max: 8.0
+    min: 1.0
+  width: 
+    distribution: uniform
+    # range from EfficientNet paper
+    max: 5.0
+    min: 1.0
+program: trainer.py
+command:
+  - ${env}
+  - ${interpreter}
+  - ${program}
+  - "--config"
+  - "configs_sweep.yaml"
+  - ${args}

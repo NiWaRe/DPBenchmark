@@ -72,7 +72,10 @@ class LitModelDP(LightningModule):
         nr_stages: int = 1,
         depth: float = 1.0, 
         width: float = 1.0,
-        skip: int = 0,
+        halve_dim: bool = False, 
+        after_conv_fc: nn.Module = None, 
+        skip_depth: int = 2,
+        skip: int = 0, # TODO: potentially rm
         model_surgeon: ModelSurgeon = None,
         data_name: str = "cifar10",
         datamodule_class: Type[LightningDataModule] = None,
@@ -107,7 +110,10 @@ class LitModelDP(LightningModule):
             nr_stages: how many stages in conv net 
             depth: factor to determine how many conv blocks per stage
             width: factor to determine how many filters per conv block 
-            skip: int to select the kind of skip connections (see models.py for more info)
+            halve_dim: whether in residual stack we also downsample or not
+            after_conv_fc: what function to use after Conv2d (e.g. batchnorm, pool, identity)
+            skip_depth: how many ConvBlocks should be jumped by skip connection
+            skip: for the base model scaling model, whether to use skip connections or not
             ##
             model_surgeon: passed in deepee.ModelSurgeon to make model compatible with DP [deepee]
             data_name: also pass in what data to train on to possibly adapt model 
@@ -141,20 +147,21 @@ class LitModelDP(LightningModule):
             nr_stages,
             depth, 
             width, 
-            skip
+            halve_dim, 
+            after_conv_fc, 
+            skip_depth,
         )
         # TODO: only temp., change later (CHECK WHEN ONLY FOR DP WHEN ALWAYS)
         # operate - alter the model to be DP compatible if needed
         if dp: # and (model_name == "resnet18" or model_name == "efficientnet_b7"):
             if dp_tool == "deepee": 
                 self.model = model_surgeon.operate(self.model)
-            elif dp_tool == "opacus" or True: 
-                # self.model = module_modification.convert_batchnorm_modules(
-                #     model=self.model, 
-                #     converter=module_modification._batchnorm_to_groupnorm,
-                # )
-                # NOTE: change the parameter of group
-                self.model = module_modification.nullify_batchnorm_modules()
+            elif dp_tool == "opacus": 
+                # TODO: check group size param if converting to groupnorm
+                self.model = module_modification.convert_batchnorm_modules(
+                    model=self.model, 
+                    converter=module_modification._batchnorm_to_groupnorm,
+                )
 
         print(self.model)
 

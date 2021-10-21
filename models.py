@@ -443,7 +443,8 @@ class ResidualStack(nn.Module):
         return out
 
 # NOTE: some differences to my manually crafted CNN (not just added skip connections)
-# for now only: downsampling is done with adaption of channels in first ConvBlock 
+    # - downsampling is done with adaption of channels in first ConvBlock 
+    # - downsampling is done through Conv2d layer and not dedicated maxpool layer
 
 class ENScalingResidualModel(nn.Module):
     """
@@ -466,7 +467,7 @@ class ENScalingResidualModel(nn.Module):
     def __init__(
         self, 
         halve_dim : bool, 
-        after_conv_fc : nn.Module,
+        after_conv_fc_str : str,
         skip_depth : int = 2, 
         in_channels: int = 3,
         depth: float = 1.0,
@@ -479,6 +480,34 @@ class ENScalingResidualModel(nn.Module):
         # the stage 1 base model has 1 conv block per stage (in both stage 0 and 1)
         width_stage_zero = int(width*8)
         depth_stage_zero = int(depth*1)
+
+        # instantiate after_conv_fc accoridng to params
+        if after_conv_fc_str == 'batch_norm':
+            after_conv_fc = nn.BatchNorm2d(width_stage_zero)
+        elif after_conv_fc_str == 'group_norm':
+            # based on original paper 32 should be the number of groups, 
+            # but here we choose 8 because the number of channels in efficientNets
+            # is only dividable by 8. If number of channels is smaller than that we 
+            # take the number of channels, that's why we apply a min.
+
+            # TODO: tune group size. 
+            after_conv_fc = nn.GroupNorm(
+                min(8, width_stage_zero), 
+                width_stage_zero, 
+                affine=True
+            )
+        elif after_conv_fc_str == 'max_pool': 
+            # keep dimensions for CIFAR10 dimenions assuming a downsampling 
+            # only through halving. 
+            after_conv_fc = nn.MaxPool2d(
+                kernel_size=3, 
+                stride=1, 
+                padding=1
+            )
+        elif after_conv_fc_str == 'identity': 
+            after_conv_fc = nn.Identity()
+
+
         self.stage_zero = nn.Sequential(
             ResidualStack(
                 in_channels,
@@ -495,6 +524,33 @@ class ENScalingResidualModel(nn.Module):
         # the stage 1 base model has 1 conv block per stage (in both stage 0 and 1)
         width_stage_one = int(width*16)
         depth_stage_one = int(depth*1)
+
+        # instantiate after_conv_fc accoridng to params
+        if after_conv_fc_str == 'batch_norm':
+            after_conv_fc = nn.BatchNorm2d(width_stage_one)
+        elif after_conv_fc_str == 'group_norm':
+            # based on original paper 32 should be the number of groups, 
+            # but here we choose 8 because the number of channels in efficientNets
+            # is only dividable by 8. If number of channels is smaller than that we 
+            # take the number of channels, that's why we apply a min.
+
+            # TODO: tune group size. 
+            after_conv_fc = nn.GroupNorm(
+                min(8, width_stage_one), 
+                width_stage_one, 
+                affine=True
+            )
+        elif after_conv_fc_str == 'max_pool': 
+            # keep dimensions for CIFAR10 dimenions assuming a downsampling 
+            # only through halving. 
+            after_conv_fc = nn.MaxPool2d(
+                kernel_size=3, 
+                stride=1, 
+                padding=1
+            )
+        elif after_conv_fc_str == 'identity': 
+            after_conv_fc = nn.Identity()
+
         self.stage_one = nn.Sequential(
             ResidualStack(
                 width_stage_zero,
@@ -539,7 +595,7 @@ def get_model(
     depth, 
     width,
     halve_dim, 
-    after_conv_fc, 
+    after_conv_fc_str, 
     skip_depth,
 ) -> nn.Module:
     model = None
@@ -581,7 +637,7 @@ def get_model(
         # img_dim is assumed to be 32 (but model works also with other img_dim)
         model = ENScalingResidualModel(
             halve_dim, 
-            after_conv_fc, 
+            after_conv_fc_str, 
             skip_depth, 
             in_channels, 
             depth, 

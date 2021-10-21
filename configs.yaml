@@ -103,9 +103,9 @@ model:
 ################################
   including_test: true
   # possible models: see model.py
-  #   resnet18, vgg11, simple_conv, stage_conv, 
-  #   en_scaling_base_model, en_scaling_residual_model, efficientnet_b[0-7]
-  #   any other model is tried to be created from the timm library
+    # resnet18, vgg11, simple_conv, stage_conv, 
+    # en_scaling_base_model, en_scaling_residual_model, efficientnet_b[0-7]
+    # any other model is tried to be created from the timm library
   model_name: 'en_scaling_residual_model'
   # for SimpleConvNet and DepthConvNet
   kernel_size: 3
@@ -114,10 +114,14 @@ model:
   nr_stages: 1
   # for en_scaling_residual_model
   halve_dim: False
-  after_conv_fc: 'nn.Module = None'
+  # possible choices: see models.py
+    # norms: batch_norm, group_norm, instance_norm 
+    # pooling: max_pool, avg_pool
+    # nothing: identity
+  after_conv_fc_str: 'batch_norm'
   skip_depth: 2
   # for en_scaling_*
-  depth: 8.0
+  depth: 2.0
   width: 1.0
   data_name: 'cifar10'
   # possible optims: sgd, adam

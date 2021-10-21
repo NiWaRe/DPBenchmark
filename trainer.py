@@ -73,7 +73,7 @@ class LitModelDP(LightningModule):
         depth: float = 1.0, 
         width: float = 1.0,
         halve_dim: bool = False, 
-        after_conv_fc: nn.Module = None, 
+        after_conv_fc_str: str = "identity", 
         skip_depth: int = 2,
         model_surgeon: ModelSurgeon = None,
         data_name: str = "cifar10",
@@ -110,7 +110,7 @@ class LitModelDP(LightningModule):
             depth: factor to determine how many conv blocks per stage
             width: factor to determine how many filters per conv block 
             halve_dim: whether in residual stack we also downsample or not
-            after_conv_fc: what function to use after Conv2d (e.g. batchnorm, pool, identity)
+            after_conv_fc_str: what function to use after Conv2d (e.g. batchnorm, pool, identity)
             skip_depth: how many ConvBlocks should be jumped by skip connection
             ##
             model_surgeon: passed in deepee.ModelSurgeon to make model compatible with DP [deepee]
@@ -146,7 +146,7 @@ class LitModelDP(LightningModule):
             depth, 
             width, 
             halve_dim, 
-            after_conv_fc, 
+            after_conv_fc_str, 
             skip_depth,
         )
         # TODO: only temp., change later (CHECK WHEN ONLY FOR DP WHEN ALWAYS)

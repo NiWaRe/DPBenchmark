@@ -197,22 +197,16 @@ class ENScalingBaseModel(nn.Module):
     Args: 
         depth - a factor multiplied with number of conv blocks per stage of base model
         width - a factor multiplied with number of channels per conv block of base model
-        skip - an int that selects what kind of skip connection 
-               - 0 = none,
-               - 1 = skips over stages starting from after the "adapt" block at the beginning
-                 of each stage (the Conv layer with different input and output channels).
     """
     def __init__(
         self, 
         in_channels: int = 3,
         depth: float = 1.0,
         width: float = 1.0,
-        skip: int = 0,
         ):
         super(ENScalingBaseModel, self).__init__()
         self.depth = depth
         self.width = width
-        self.skip = skip
 
         ## STAGE 0 ##
         # the stage 1 base model has 8 channels in stage 0
@@ -272,29 +266,6 @@ class ENScalingBaseModel(nn.Module):
             ]).tolist(), 
         )   
 
-        ## SKIP connections ##
-        # fill new channel dimensions with zeros
-        self.skip_zero = Lambda(
-            lambda x: F.pad(
-                x[:, :, ::2, ::2],
-                # from back along dimensions (width_left, width_right, high_left, ...)
-                # we only want to pad the end of the channels dimension
-                (0, 0, 0, 0, 0, width_stage_zero - in_channels),
-                mode="constant", 
-                value=0
-            )
-        )
-        self.skip_one = Lambda(
-            lambda x: F.pad(
-                x[:, :, ::2, ::2],
-                (0, 0, 0, 0, 0, width_stage_one - width_stage_zero),
-                mode="constant", 
-                value=0
-            )
-        )
-        # if channel dimensions stay the same, no padding is necessary
-        #self.skip = nn.Sequential()
-
         ## Final FC Block ##
         # output_dim is fixed to 4 (even if 8 makes more sense for the stage 1 StageConvModel)
         output_dim = 4
@@ -308,12 +279,8 @@ class ENScalingBaseModel(nn.Module):
 
     def forward(self, x):
         batch_size = x.shape[0]
-        if self.skip: 
-            out = self.stage_zero(x) + self.skip_zero(x)
-            out = self.stage_one(out) + self.skip_one(out)
-        else: 
-            out = self.stage_zero(x) 
-            out = self.stage_one(out) 
+        out = self.stage_zero(x) 
+        out = self.stage_one(out) 
         out = self.adaptive_pool(out)
         out = out.view(batch_size, -1)
         out = self.relu1(self.fc1(out))
@@ -608,8 +575,7 @@ def get_model(
         model = ENScalingBaseModel(
             in_channels, 
             depth, 
-            width, 
-            skip
+            width,
         )
     elif name=="en_scaling_residual_model":
         # img_dim is assumed to be 32 (but model works also with other img_dim)

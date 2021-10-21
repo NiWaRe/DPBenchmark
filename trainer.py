@@ -75,7 +75,6 @@ class LitModelDP(LightningModule):
         halve_dim: bool = False, 
         after_conv_fc: nn.Module = None, 
         skip_depth: int = 2,
-        skip: int = 0, # TODO: potentially rm
         model_surgeon: ModelSurgeon = None,
         data_name: str = "cifar10",
         datamodule_class: Type[LightningDataModule] = None,
@@ -113,7 +112,6 @@ class LitModelDP(LightningModule):
             halve_dim: whether in residual stack we also downsample or not
             after_conv_fc: what function to use after Conv2d (e.g. batchnorm, pool, identity)
             skip_depth: how many ConvBlocks should be jumped by skip connection
-            skip: for the base model scaling model, whether to use skip connections or not
             ##
             model_surgeon: passed in deepee.ModelSurgeon to make model compatible with DP [deepee]
             data_name: also pass in what data to train on to possibly adapt model 

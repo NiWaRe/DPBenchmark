@@ -119,7 +119,6 @@ model:
   # for en_scaling_*
   depth: 8.0
   width: 1.0
-  skip: 0
   data_name: 'cifar10'
   # possible optims: sgd, adam
   optimizer: 'sgd'

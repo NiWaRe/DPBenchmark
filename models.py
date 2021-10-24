@@ -321,18 +321,23 @@ class ResidualBlock(nn.Module):
         skip_depth : int = 2,
     ):
         super().__init__()
-        # add strides in the skip connection and zeros for the new channels
-        # if output dimension or output channels differ from respective input
-        if halve_dim or in_channels != out_channels:
-            self.skip = Lambda(
-                lambda x: F.pad(
-                    x[:, :, ::2, ::2] if halve_dim else x, # stride = 2 for halving
-                    (0, 0, 0, 0, 0, out_channels - in_channels), 
-                    mode="constant", value=0
+        # save for turning on and off skip connection
+        self.skip_depth = skip_depth
+
+        # also add this so that skip doesn't show up in model print
+        if skip_depth: 
+            # add strides in the skip connection and zeros for the new channels
+            # if output dimension or output channels differ from respective input
+            if halve_dim or in_channels != out_channels:
+                self.skip = Lambda(
+                    lambda x: F.pad(
+                        x[:, :, ::2, ::2] if halve_dim else x, # stride = 2 for halving
+                        (0, 0, 0, 0, 0, out_channels - in_channels), 
+                        mode="constant", value=0
+                    )
                 )
-            )
-        else:
-            self.skip = nn.Sequential()
+            else:
+                self.skip = nn.Sequential()
 
         # for first layer either add downsampling layer or normal layer
         # in any case adapt channels 
@@ -350,6 +355,7 @@ class ResidualBlock(nn.Module):
         )
         
         # skip_depth decides on how many Conv2d layers one Residual Block has
+        # -1 the one we just created above
         self.conv_layers.extend(
             [
                 nn.Conv2d(
@@ -360,7 +366,7 @@ class ResidualBlock(nn.Module):
                     padding=1, 
                     bias=False
                 )
-                for i in range(skip_depth-1)
+                for i in range(1, skip_depth)
             ]
         )
 
@@ -369,6 +375,11 @@ class ResidualBlock(nn.Module):
             [
                 deepcopy(after_conv_fc)
                 for i in range(skip_depth)
+            ] 
+            # extra handling of case with no skip connections
+            if skip_depth else 
+            [
+                deepcopy(after_conv_fc)
             ]
         )
 
@@ -377,6 +388,11 @@ class ResidualBlock(nn.Module):
             [
                 nn.ReLU()
                 for i in range(skip_depth)
+            ]
+            # extra handling of case with no skip connections
+            if skip_depth else 
+            [
+                nn.ReLU()
             ]
         )
 
@@ -390,7 +406,9 @@ class ResidualBlock(nn.Module):
 
         # add last triple and connect input
         out = self.conv_layers[-1](out)
-        out = self.after_conv_fcs[-1](out) + self.skip(input)
+        out = self.after_conv_fcs[-1](out) 
+        if self.skip_depth: 
+            out += self.skip(input)
         out = self.activation_fcs[-1](out)
 
         return out
@@ -535,8 +553,9 @@ class ENScalingResidualModel(nn.Module):
             # take the number of channels, that's why we apply a min.
 
             # TODO: tune group size. 
+            # NAS width values were restricted to multiples of 8
             after_conv_fc = nn.GroupNorm(
-                min(8, width_stage_one), 
+                min(32, width_stage_one), 
                 width_stage_one, 
                 affine=True
             )

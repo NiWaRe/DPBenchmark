@@ -12,7 +12,7 @@ trainer:
     init_args:
       project: 'baseline'
       # TODO: automate this 
-      name: 'en_scaling_res_model_nonorm_d80_w1'
+      name: 'en_scaling_res_model_gn_d80_w1'
       # NOTE: Log checkpoints created by ModelCheckpoint as W&B artifacts. 
       # log_model: true
   checkpoint_callback: true
@@ -113,15 +113,15 @@ model:
   # for stage_conv
   nr_stages: 1
   # for en_scaling_residual_model
-  halve_dim: False
+  halve_dim: True
   # possible choices: see models.py
-    # norms: batch_norm, group_norm, instance_norm 
-    # pooling: max_pool, avg_pool
+    # norms: batch_norm, group_norm, (instance_norm)
+    # pooling: max_pool, (avg_pool)
     # nothing: identity
-  after_conv_fc_str: 'batch_norm'
-  skip_depth: 2
+  after_conv_fc_str: 'group_norm'
+  skip_depth: 4
   # for en_scaling_*
-  depth: 2.0
+  depth: 3.0
   width: 1.0
   data_name: 'cifar10'
   # possible optims: sgd, adam

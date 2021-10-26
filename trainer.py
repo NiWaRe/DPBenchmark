@@ -149,17 +149,17 @@ class LitModelDP(LightningModule):
             after_conv_fc_str, 
             skip_depth,
         )
-        # TODO: only temp., change later (CHECK WHEN ONLY FOR DP WHEN ALWAYS)
-        # operate - alter the model to be DP compatible if needed
-        if dp: # and (model_name == "resnet18" or model_name == "efficientnet_b7"):
-            if dp_tool == "deepee": 
-                self.model = model_surgeon.operate(self.model)
-            elif dp_tool == "opacus": 
-                # TODO: check group size param if converting to groupnorm
-                self.model = module_modification.convert_batchnorm_modules(
-                    model=self.model, 
-                    converter=module_modification._batchnorm_to_groupnorm,
-                )
+        
+        if dp_tool == "deepee": 
+            self.model = model_surgeon.operate(self.model)
+        elif dp_tool == "opacus" or dp == False: 
+            # if no batch_norm modules exist, nothing happens
+            # opacus should also be used for baseline trainings (dp == False)
+            # TODO: what other than batch_norm modules could exist? 
+            self.model = module_modification.convert_batchnorm_modules(
+                model=self.model, 
+                converter=module_modification._batchnorm_to_groupnorm,
+            )
 
         print(self.model)
 

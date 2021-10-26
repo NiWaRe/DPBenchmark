@@ -555,7 +555,7 @@ class ENScalingResidualModel(nn.Module):
             # TODO: tune group size. 
             # NAS width values were restricted to multiples of 8
             after_conv_fc = nn.GroupNorm(
-                min(32, width_stage_one), 
+                min(8, width_stage_one), 
                 width_stage_one, 
                 affine=True
             )
@@ -684,6 +684,12 @@ def get_model(
             bias=False
         )
         model.features[2] = nn.Identity()
+    elif name=="inception_v4": 
+        model = timm.create_model("inception_v4", pretrained=True)
+        model.last_linear = nn.Linear(1536, output_classes)
+    elif name=="densenet121": 
+        model = timm.create_model("densenet121", pretrained=True)
+        model.classifier = nn.Linear(1024, output_classes)
     # by default a timm model is created
     else: 
         # TODO: try out different pretrainings 

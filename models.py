@@ -690,6 +690,9 @@ def get_model(
     elif name=="densenet121": 
         model = timm.create_model("densenet121", pretrained=True)
         model.classifier = nn.Linear(1024, output_classes)
+    elif name=="mobilenetv3_large_100": 
+        model = timm.create_model("mobilenetv3_large_100", pretrained=True)
+        model.classifier = nn.Linear(1280, output_classes)
     # by default a timm model is created
     else: 
         # TODO: try out different pretrainings 

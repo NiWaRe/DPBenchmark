@@ -13,32 +13,51 @@ parameters:
   trainer.max_epochs:
     distribution: categorical
     values: 
-    - 15
-    - 30
+      - 15
+      - 30
   # ConvNet params for 'en_scaling_residual_model'
   # halve_dim: True
-  after_conv_fc_str: 
+  model.after_conv_fc_str: 
     distribution: categorical
     values: 
-    - 'max_pool'
-    - 'group_norm'
-    - 'identity'
+      - 'max_pool'
+      - 'group_norm'
+      - 'identity'
     #- 'batch_norm_dp'
-  skip_depth: 
+  model.skip_depth: 
     distribution: int_uniform
     # range based on ResNet paper (using 2)
     max: 4
     min: 0
-  depth: 
-    distribution: uniform
-    # range from EfficientNet paper
-    max: 8.0
-    min: 1.0
-  width: 
-    distribution: uniform
-    # range from EfficientNet paper
-    max: 5.0
-    min: 1.0
+  model.depth: 
+    distribution: categorical
+    # range from EfficientNet paper (1.0 - 8.0)
+    values: 
+      - 1.0
+      - 2.0
+      - 3.0
+      - 4.0
+      - 5.0
+      - 7.0
+      - 8.0
+      - 9.0
+      - 10.0
+  model.width: 
+    # restrict to integers (not floats) in this search 
+    # so that number of channels stays divisble by num groups
+    # when using group norm. (no int_uniform to not change types in trainer.py)
+    # range from EfficientNet paper (1.0 - 5.0)
+    distribution: categorical
+    values: 
+      - 1.0
+      - 2.0
+      - 3.0
+      - 4.0
+      - 5.0
+      - 7.0
+      - 8.0
+      - 9.0
+      - 10.0
 program: trainer.py
 command:
   - ${env}

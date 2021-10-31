@@ -83,10 +83,11 @@ model:
 ################################
   including_test: true
   # possible models: see model.py
-    # resnet18, vgg11, simple_conv, stage_conv, 
-    # en_scaling_base_model, en_scaling_residual_model, efficientnet_b[0-7]
+    # resnet18, vgg11, inception_v4, densenet121, mobilenetv3_large_100, googlenet, simple_conv
+    # stage_conv, en_scaling_base_model, en_scaling_residual_model, efficientnet_b[0-7]
     # any other model is tried to be created from the timm library
-  model_name: 'en_scaling_residual_model'
+  model_name: 'googlenet'
+  pretrained: True
   # for SimpleConvNet and DepthConvNet
   kernel_size: 3
   conv_layers: [16, 32]
@@ -101,8 +102,9 @@ model:
   after_conv_fc_str: 'max_pool'
   skip_depth: 2
   # for en_scaling_*
-  depth: 8.0
-  width: 1.0
+  #TODO: what happens for depth =1 if skip_depth > depth?
+  depth: 1.0
+  width: 5.0 
   # NOTE: this is only relevant for the deepee DP tool
   # possible surgeries: see surgery.py
   # NOTE: comment out if not needed

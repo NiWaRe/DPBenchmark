@@ -12,7 +12,7 @@ trainer:
     init_args:
       project: 'baseline'
       # TODO: automate this 
-      name: 'en_scaling_res_model_gn_d80_w1'
+      name: 'googlenet'
       # NOTE: Log checkpoints created by ModelCheckpoint as W&B artifacts. 
       # log_model: true
   checkpoint_callback: true
@@ -103,10 +103,11 @@ model:
 ################################
   including_test: true
   # possible models: see model.py
-    # resnet18, vgg11, simple_conv, stage_conv, 
-    # en_scaling_base_model, en_scaling_residual_model, efficientnet_b[0-7]
+    # resnet18, vgg11, inception_v4, densenet121, mobilenetv3_large_100, googlenet, simple_conv
+    # stage_conv, en_scaling_base_model, en_scaling_residual_model, efficientnet_b[0-7]
     # any other model is tried to be created from the timm library
-  model_name: 'en_scaling_residual_model'
+  model_name: 'googlenet'
+  pretrained: True
   # for SimpleConvNet and DepthConvNet
   kernel_size: 3
   conv_layers: [16, 32]
@@ -129,8 +130,8 @@ model:
   opt_kwargs: 
     lr: 0.05 #0.5
   lr_scheduler: true
-  batch_size: 32 #64 #16
-  virtual_batch_size: 64 #128 #32 # not using at the moment
+  batch_size: 32 # some sweeps have 64 and 128 virtual batches!
+  virtual_batch_size: 64 
   # DP params
   # under model because I didn't want to overwrite the trainer class 
   # to include these arguments. I can access the params via the model 

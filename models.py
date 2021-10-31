@@ -664,16 +664,16 @@ def get_model(
         )
     elif name=="resnet18":
         model = torchvision.models.resnet18(
-            pretrained=pretrained, 
-            num_classes=num_classes
+            pretrained=pretrained
         )
         model.conv1 = nn.Conv2d(
-            in_channels, 64, kernel_size=3, stride=1, padding=1, bias=False)
+            in_channels, 64, kernel_size=3, stride=1, padding=1, bias=False
+        )
         model.maxpool = nn.Identity()
+        model.fc = nn.Linear(512, num_classes)
     elif name=="vgg11":
         model = torchvision.models.vgg11(
-            pretrained=pretrained, 
-            num_classes=num_classes
+            pretrained=pretrained
         )
         model.features[0] = nn.Conv2d(
             in_channels, 
@@ -684,14 +684,23 @@ def get_model(
             bias=False
         )
         model.features[2] = nn.Identity()
+        model.classifier[6] = nn.Linear(4096, 10)
+    elif name=="googlenet":
+        model = torchvision.models.googlenet(
+            pretrained=pretrained,
+        )
+        model.fc = nn.Linear(1024, 10)
+        # these outputs are not considered 
+        # model.aux1.fc2 = nn.Linear(1024, 10)
+        # model.aux2.fc2 = nn.Linear(1024, 10)
     elif name=="inception_v4": 
-        model = timm.create_model("inception_v4", pretrained=True)
+        model = timm.create_model("inception_v4", pretrained=pretrained)
         model.last_linear = nn.Linear(1536, output_classes)
     elif name=="densenet121": 
-        model = timm.create_model("densenet121", pretrained=True)
+        model = timm.create_model("densenet121", pretrained=pretrained)
         model.classifier = nn.Linear(1024, output_classes)
     elif name=="mobilenetv3_large_100": 
-        model = timm.create_model("mobilenetv3_large_100", pretrained=True)
+        model = timm.create_model("mobilenetv3_large_100", pretrained=pretrained)
         model.classifier = nn.Linear(1280, output_classes)
     # by default a timm model is created
     else: 

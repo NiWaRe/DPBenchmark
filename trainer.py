@@ -174,12 +174,23 @@ class LitModelDP(LightningModule):
 
     def forward(self, x):
         out = self.model(x)
+        # googlenet outputs objects of the class GoogleNetOutputs 
+        # where the final logits are at position 0 (not if pretrained)
+        if not self.hparams.pretrained and self.hparams.model_name == "googlenet": 
+            out = out[0]
         return out
 
     def training_step(self, batch, batch_idx):
         x, y = batch
         criterion = nn.CrossEntropyLoss()
-        loss = criterion(self.model(x), y)
+
+        out = self.model(x)
+        # googlenet outputs objects of the class GoogleNetOutputs 
+        # where the final logits are at position 0 (not if pretrained)
+        if not self.hparams.pretrained and self.hparams.model_name == "googlenet": 
+            out = out[0]
+
+        loss = criterion(out, y)
         self.log('train_loss', loss)
 
         # also do non-dp backward manually to track global grad
@@ -311,7 +322,7 @@ class LitModelDP(LightningModule):
             #     ),
             #     'interval': 'step',
             # }
-            nr_epochs = 10
+            nr_epochs = 1 if self.hparams.dp else 10
             scheduler_dict = {
                 'scheduler': StepLR(
                     optimizer, 

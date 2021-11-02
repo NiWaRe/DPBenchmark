@@ -152,7 +152,7 @@ class LitModelDP(LightningModule):
         
         if dp_tool == "deepee": 
             self.model = model_surgeon.operate(self.model)
-        elif dp_tool == "opacus" or dp == False: 
+        elif dp_tool == "opacus" and dp == True: 
             # if no batch_norm modules exist, nothing happens
             # opacus should also be used for baseline trainings (dp == False)
             # TODO: what other than batch_norm modules could exist? 

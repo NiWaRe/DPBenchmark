@@ -83,10 +83,11 @@ model:
 ################################
   including_test: true
   # possible models: see model.py
-    # resnet18, vgg11, inception_v4, densenet121, mobilenetv3_large_100, googlenet, simple_conv
-    # stage_conv, en_scaling_base_model, en_scaling_residual_model, efficientnet_b[0-7]
+    # resnet18, vgg11(_bn), inception_v4, densenet121, mobilenetv3_large_100, mobilenet_v3_small, 
+    # vit_base_patch16_224, simple_conv, stage_conv, en_scaling_base_model, en_scaling_residual_model, 
+    # googlenet, xception, efficientnet_b[0-7]
     # any other model is tried to be created from the timm library
-  model_name: 'googlenet'
+  model_name: 'mobilenet_v3_small'
   pretrained: True
   # for SimpleConvNet and DepthConvNet
   kernel_size: 3

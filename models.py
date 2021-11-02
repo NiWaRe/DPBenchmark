@@ -670,7 +670,7 @@ def get_model(
             in_channels, 64, kernel_size=3, stride=1, padding=1, bias=False
         )
         model.maxpool = nn.Identity()
-        model.fc = nn.Linear(512, num_classes)
+        model.fc = nn.Linear(512, output_classes)
     elif name=="vgg11":
         model = torchvision.models.vgg11(
             pretrained=pretrained
@@ -684,15 +684,32 @@ def get_model(
             bias=False
         )
         model.features[2] = nn.Identity()
-        model.classifier[6] = nn.Linear(4096, 10)
+        model.classifier[6] = nn.Linear(4096, output_classes)
+    elif name=="vgg11_bn":
+        model = torchvision.models.vgg11_bn(
+            pretrained=pretrained
+        )
+        model.features[0] = nn.Conv2d(
+            in_channels, 
+            64, 
+            kernel_size=3, 
+            stride=1, 
+            padding=1, 
+            bias=False
+        )
+        model.features[3] = nn.Identity()
+        model.classifier[6] = nn.Linear(4096, output_classes)
     elif name=="googlenet":
         model = torchvision.models.googlenet(
             pretrained=pretrained,
         )
-        model.fc = nn.Linear(1024, 10)
+        model.fc = nn.Linear(1024, output_classes)
         # these outputs are not considered 
         # model.aux1.fc2 = nn.Linear(1024, 10)
         # model.aux2.fc2 = nn.Linear(1024, 10)
+    elif name=="xception":
+        model = timm.create_model('xception', pretrained=pretrained)
+        model.fc = nn.Linear(2048, output_classes)
     elif name=="inception_v4": 
         model = timm.create_model("inception_v4", pretrained=pretrained)
         model.last_linear = nn.Linear(1536, output_classes)
@@ -702,6 +719,14 @@ def get_model(
     elif name=="mobilenetv3_large_100": 
         model = timm.create_model("mobilenetv3_large_100", pretrained=pretrained)
         model.classifier = nn.Linear(1280, output_classes)
+    elif name=="mobilenet_v3_small": 
+        model = torchvision.models.mobilenet_v3_small(
+            pretrained=pretrained,
+        )
+        model.classifier[3] = nn.Linear(1024, output_classes)
+    elif name=="vit_base_patch16_224":
+        model = timm.create_model('vit_base_patch16_224', pretrained=pretrained)
+        model.head = nn.Linear(768, output_classes)
     # by default a timm model is created
     else: 
         # TODO: try out different pretrainings 

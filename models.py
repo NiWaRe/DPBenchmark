@@ -514,6 +514,9 @@ class ENScalingResidualModel(nn.Module):
                 width_stage_zero, 
                 affine=True
             )
+        elif after_conv_fc_str == 'instance_norm':
+            # TODO: make adaptive for MNIST (this assumes dn RGB img with 3 channels)
+            after_conv_fc = nn.InstanceNorm2d(3)
         elif after_conv_fc_str == 'max_pool': 
             # keep dimensions for CIFAR10 dimenions assuming a downsampling 
             # only through halving. 
@@ -559,6 +562,9 @@ class ENScalingResidualModel(nn.Module):
                 width_stage_one, 
                 affine=True
             )
+        elif after_conv_fc_str == 'instance_norm':
+            # TODO: make adaptive for MNIST (this assumes dn RGB img with 3 channels)
+            after_conv_fc = nn.InstanceNorm2d(3)
         elif after_conv_fc_str == 'max_pool': 
             # keep dimensions for CIFAR10 dimenions assuming a downsampling 
             # only through halving. 

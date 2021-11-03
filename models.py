@@ -499,6 +499,7 @@ class ENScalingResidualModel(nn.Module):
         width_stage_zero = int(width*8)
         depth_stage_zero = int(depth*1)
 
+        # TODO: make adaptive for MNIST (most assume dn RGB img with 3 channels)
         # instantiate after_conv_fc accoridng to params
         if after_conv_fc_str == 'batch_norm':
             after_conv_fc = nn.BatchNorm2d(width_stage_zero)
@@ -515,12 +516,19 @@ class ENScalingResidualModel(nn.Module):
                 affine=True
             )
         elif after_conv_fc_str == 'instance_norm':
-            # TODO: make adaptive for MNIST (this assumes dn RGB img with 3 channels)
             after_conv_fc = nn.InstanceNorm2d(3)
         elif after_conv_fc_str == 'max_pool': 
             # keep dimensions for CIFAR10 dimenions assuming a downsampling 
             # only through halving. 
             after_conv_fc = nn.MaxPool2d(
+                kernel_size=3, 
+                stride=1, 
+                padding=1
+            )
+        elif after_conv_fc_str == 'avg_pool': 
+            # keep dimensions for CIFAR10 dimenions assuming a downsampling 
+            # only through halving. 
+            after_conv_fc = nn.AvgPool2d(
                 kernel_size=3, 
                 stride=1, 
                 padding=1
@@ -546,6 +554,7 @@ class ENScalingResidualModel(nn.Module):
         width_stage_one = int(width*16)
         depth_stage_one = int(depth*1)
 
+        # TODO: make adaptive for MNIST (most assume dn RGB img with 3 channels)
         # instantiate after_conv_fc accoridng to params
         if after_conv_fc_str == 'batch_norm':
             after_conv_fc = nn.BatchNorm2d(width_stage_one)
@@ -563,12 +572,19 @@ class ENScalingResidualModel(nn.Module):
                 affine=True
             )
         elif after_conv_fc_str == 'instance_norm':
-            # TODO: make adaptive for MNIST (this assumes dn RGB img with 3 channels)
             after_conv_fc = nn.InstanceNorm2d(3)
         elif after_conv_fc_str == 'max_pool': 
             # keep dimensions for CIFAR10 dimenions assuming a downsampling 
             # only through halving. 
             after_conv_fc = nn.MaxPool2d(
+                kernel_size=3, 
+                stride=1, 
+                padding=1
+            )
+        elif after_conv_fc_str == 'avg_pool': 
+            # keep dimensions for CIFAR10 dimenions assuming a downsampling 
+            # only through halving. 
+            after_conv_fc = nn.AvgPool2d(
                 kernel_size=3, 
                 stride=1, 
                 padding=1

@@ -107,7 +107,7 @@ model:
     # vit_base_patch16_224, simple_conv, stage_conv, en_scaling_base_model, en_scaling_residual_model, 
     # googlenet, xception, efficientnet_b[0-7]
     # any other model is tried to be created from the timm library
-  model_name: 'mobilenet_v3_small'
+  model_name: 'en_scaling_residual_model'
   pretrained: True
   # for SimpleConvNet and DepthConvNet
   kernel_size: 3
@@ -115,15 +115,16 @@ model:
   # for stage_conv
   nr_stages: 1
   # for en_scaling_residual_model
+  dense: True
   halve_dim: True
   # possible choices: see models.py
-    # norms: batch_norm, group_norm, (instance_norm)
-    # pooling: max_pool, (avg_pool)
+    # norms: batch_norm, group_norm, instance_norm
+    # pooling: max_pool, avg_pool
     # nothing: identity
   after_conv_fc_str: 'group_norm'
   skip_depth: 4
   # for en_scaling_*
-  depth: 3.0
+  depth: 8.0
   width: 1.0
   data_name: 'cifar10'
   # possible optims: sgd, adam

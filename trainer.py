@@ -72,6 +72,7 @@ class LitModelDP(LightningModule):
         nr_stages: int = 1,
         depth: float = 1.0, 
         width: float = 1.0,
+        dense: bool = False,
         halve_dim: bool = False, 
         after_conv_fc_str: str = "identity", 
         skip_depth: int = 2,
@@ -109,6 +110,7 @@ class LitModelDP(LightningModule):
             nr_stages: how many stages in conv net 
             depth: factor to determine how many conv blocks per stage
             width: factor to determine how many filters per conv block 
+            dense: whether to use dense connections (implies halve_dim=False, skip_depth=0)
             halve_dim: whether in residual stack we also downsample or not
             after_conv_fc_str: what function to use after Conv2d (e.g. batchnorm, pool, identity)
             skip_depth: how many ConvBlocks should be jumped by skip connection
@@ -148,6 +150,7 @@ class LitModelDP(LightningModule):
             halve_dim, 
             after_conv_fc_str, 
             skip_depth,
+            dense,
         )
         
         if dp_tool == "deepee": 

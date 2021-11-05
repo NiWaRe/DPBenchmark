@@ -1,12 +1,14 @@
 # general python 
-from typing import List
+from typing import List, Optional
 from copy import deepcopy
+from functools import partial
 
 # general ml
 import numpy as np
 import timm
 
 # torch 
+import torch
 from torch.utils import data
 import torchvision
 from torch import nn
@@ -22,7 +24,7 @@ from data import (
 from deepee import (PrivacyWrapper, PrivacyWatchdog, UniformDataLoader,
                      ModelSurgeon, SurgicalProcedures, watchdog)
 
-# Utility Modules
+# Utility Modules, Functions
 class Lambda(nn.Module):
     """
     Module to encapsulate specific functions as modules. 
@@ -34,6 +36,59 @@ class Lambda(nn.Module):
 
     def forward(self, x):
         return self.func(x)
+
+def getAfterConvFc(
+    after_conv_fc_str : str, 
+    num_features : int,
+    **kwargs
+    ): 
+    """
+    This is a helper function to return all the different after_conv_fcs
+    we want to consider. This is written in a dedicated function because
+    it is called from different classes and because this is the central place
+    where all possible after_conv_fct are listed.
+
+    Args: 
+        after_conv_fc_str: str to select the specific function
+        num_features: only necessary for norms 
+
+    """
+    if after_conv_fc_str == 'batch_norm':
+        after_conv_fc = nn.BatchNorm2d(
+            num_features=num_features
+        )
+    elif after_conv_fc_str == 'group_norm':
+        # for num_groups = num_features => LayerNorm
+        # for num_groups = 1 => InstanceNorm
+        after_conv_fc = nn.GroupNorm(
+            num_groups=min(8, num_features), 
+            num_channels=num_features, 
+            affine=True
+        )
+    elif after_conv_fc_str == 'instance_norm':
+        after_conv_fc = nn.InstanceNorm2d(
+            num_features=num_features,
+        )
+    elif after_conv_fc_str == 'max_pool': 
+        # keep dimensions for CIFAR10 dimenions assuming a downsampling 
+        # only through halving. 
+        after_conv_fc = nn.MaxPool2d(
+            kernel_size=3, 
+            stride=1, 
+            padding=1
+        )
+    elif after_conv_fc_str == 'avg_pool': 
+        # keep dimensions for CIFAR10 dimenions assuming a downsampling 
+        # only through halving. 
+        after_conv_fc = nn.AvgPool2d(
+            kernel_size=3, 
+            stride=1, 
+            padding=1
+        )
+    elif after_conv_fc_str == 'identity': 
+        after_conv_fc = nn.Identity()
+    
+    return after_conv_fc
 
 class SimpleConvNet(nn.Module):
     """
@@ -307,7 +362,7 @@ class ResidualBlock(nn.Module):
         in_channels: the number of channels (feature maps) of the incoming embedding
         out_channels: the number of channels after the first convolution
         halve_dim : whether to half the dimension in the last Conv2D
-        after_conv_fc: norm or pooling after Conv2D layer (BatchNorm2d, MaxPool, Identity)
+        after_conv_fc_str: norm or pooling after Conv2D layer (BatchNorm2d, MaxPool, Identity)
         skip_depth: how much blocks skip connection should jump,
             2 = default, 0 = no skip connections
     """
@@ -317,7 +372,7 @@ class ResidualBlock(nn.Module):
         in_channels : int, 
         out_channels : int,
         halve_dim : bool, 
-        after_conv_fc : nn.Module,
+        after_conv_fc_str : str,
         skip_depth : int = 2,
     ):
         super().__init__()
@@ -371,6 +426,10 @@ class ResidualBlock(nn.Module):
         )
 
         # initiate the functions after Conv2d
+        after_conv_fc = getAfterConvFc(
+            after_conv_fc_str=after_conv_fc_str, 
+            num_features=out_channels,
+        )
         self.after_conv_fcs = nn.ModuleList(
             [
                 deepcopy(after_conv_fc)
@@ -421,10 +480,11 @@ class ResidualStack(nn.Module):
         in_channels: The number of channels (feature maps) of the incoming embedding
         out_channels: The number of channels after the first layer
         halve_dim : whether to half the dimension in the last Conv2D
-        after_conv_fc: norm or pooling after Conv2D layer (BatchNorm2d, MaxPool, Identity)
+        after_conv_fc_str: norm or pooling after Conv2D layer (BatchNorm2d, MaxPool, Identity)
         skip_depth: how much blocks skip connection should jump,
             2 = default, 0 = no skip connections
         num_blocks: Number of residual blocks
+        dense: whether dense connections are used (in this case: skip_depth=0, halve_dim=False) 
     """
     
     def __init__(
@@ -432,24 +492,38 @@ class ResidualStack(nn.Module):
         in_channels : int, 
         out_channels : int, 
         halve_dim : bool, 
-        after_conv_fc : nn.Module,
+        after_conv_fc_str : str,
         skip_depth : int,
         num_blocks : int, 
+        dense : bool,
     ):
         super().__init__()
+        self.dense = dense
 
         # first block to get the right number of channels (from previous block to current)
         # and sample down if specified (specifically at the first layer in the ResidualBlock)
         self.residual_stack = nn.ModuleList(
             [
-                ResidualBlock(in_channels, out_channels, halve_dim, after_conv_fc, skip_depth)
+                ResidualBlock(
+                    in_channels, 
+                    out_channels, 
+                    halve_dim, 
+                    after_conv_fc_str, 
+                    skip_depth
+                )
             ]
         )
         
         # EXTEND adds array as elements of existing array, APPEND adds array as new element of array 
         self.residual_stack.extend(
             [
-                ResidualBlock(out_channels, out_channels, False, after_conv_fc, skip_depth) 
+                ResidualBlock(
+                    out_channels*i + in_channels if dense else out_channels, 
+                    out_channels, 
+                    False, 
+                    after_conv_fc_str, 
+                    skip_depth
+                ) 
                 for i in range(1, num_blocks)
             ]
         )
@@ -457,13 +531,19 @@ class ResidualStack(nn.Module):
     def forward(self, input):
         out = input
         for layer in self.residual_stack:
-            out = layer(out)
+            temp = layer(out)
+            if self.dense: 
+                # concatenate at channel dimension
+                out = torch.cat((out, temp), 1)
+            else: 
+                out = temp
         return out
 
 # NOTE: some differences to my manually crafted CNN (not just added skip connections)
     # - downsampling is done with adaption of channels in first ConvBlock 
     # - downsampling is done through Conv2d layer and not dedicated maxpool layer
 
+# TODO: make adaptive for MNIST (most assume dn RGB img with 3 channels)
 class ENScalingResidualModel(nn.Module):
     """
     ConvNet that is based on stage 1 network of StageConvNet and where
@@ -478,8 +558,9 @@ class ENScalingResidualModel(nn.Module):
         after_conv_fc: norm or pooling after Conv2D layer (BatchNorm2d, MaxPool, Identity)
         skip_depth: how much blocks skip connection should jump,
             2 = default, 0 = no skip connections
-        depth - a factor multiplied with number of conv blocks per stage of base model
-        width - a factor multiplied with number of channels per conv block of base model
+        dense: whether dense connections are used (skip_depth=0, halve_dim=False in this case)
+        depth: a factor multiplied with number of conv blocks per stage of base model
+        width: a factor multiplied with number of channels per conv block of base model
                 := num_blocks (as defined in the scaling approach)
     """
     def __init__(
@@ -487,11 +568,18 @@ class ENScalingResidualModel(nn.Module):
         halve_dim : bool, 
         after_conv_fc_str : str,
         skip_depth : int = 2, 
+        dense : bool = False,
         in_channels: int = 3,
         depth: float = 1.0,
         width: float = 1.0,
         ):
         super(ENScalingResidualModel, self).__init__()
+        self.dense = dense
+        if dense: 
+            if halve_dim == True or skip_depth != 0: 
+                print("You're using dense connections => halve_dim=False and skip_depth=0")
+            halve_dim = False
+            skip_depth = 0
 
         ## STAGE 0 ##
         # the stage 1 base model has 8 channels in stage 0
@@ -499,52 +587,15 @@ class ENScalingResidualModel(nn.Module):
         width_stage_zero = int(width*8)
         depth_stage_zero = int(depth*1)
 
-        # TODO: make adaptive for MNIST (most assume dn RGB img with 3 channels)
-        # instantiate after_conv_fc accoridng to params
-        if after_conv_fc_str == 'batch_norm':
-            after_conv_fc = nn.BatchNorm2d(width_stage_zero)
-        elif after_conv_fc_str == 'group_norm':
-            # based on original paper 32 should be the number of groups, 
-            # but here we choose 8 because the number of channels in efficientNets
-            # is only dividable by 8. If number of channels is smaller than that we 
-            # take the number of channels, that's why we apply a min.
-
-            # TODO: tune group size. 
-            after_conv_fc = nn.GroupNorm(
-                min(8, width_stage_zero), 
-                width_stage_zero, 
-                affine=True
-            )
-        elif after_conv_fc_str == 'instance_norm':
-            after_conv_fc = nn.InstanceNorm2d(3)
-        elif after_conv_fc_str == 'max_pool': 
-            # keep dimensions for CIFAR10 dimenions assuming a downsampling 
-            # only through halving. 
-            after_conv_fc = nn.MaxPool2d(
-                kernel_size=3, 
-                stride=1, 
-                padding=1
-            )
-        elif after_conv_fc_str == 'avg_pool': 
-            # keep dimensions for CIFAR10 dimenions assuming a downsampling 
-            # only through halving. 
-            after_conv_fc = nn.AvgPool2d(
-                kernel_size=3, 
-                stride=1, 
-                padding=1
-            )
-        elif after_conv_fc_str == 'identity': 
-            after_conv_fc = nn.Identity()
-
-
         self.stage_zero = nn.Sequential(
             ResidualStack(
                 in_channels,
                 width_stage_zero,
                 halve_dim,
-                after_conv_fc, 
+                after_conv_fc_str, 
                 skip_depth, 
-                depth_stage_zero
+                depth_stage_zero, 
+                dense
             ),
         )
 
@@ -553,55 +604,36 @@ class ENScalingResidualModel(nn.Module):
         # the stage 1 base model has 1 conv block per stage (in both stage 0 and 1)
         width_stage_one = int(width*16)
         depth_stage_one = int(depth*1)
-
-        # TODO: make adaptive for MNIST (most assume dn RGB img with 3 channels)
-        # instantiate after_conv_fc accoridng to params
-        if after_conv_fc_str == 'batch_norm':
-            after_conv_fc = nn.BatchNorm2d(width_stage_one)
-        elif after_conv_fc_str == 'group_norm':
-            # based on original paper 32 should be the number of groups, 
-            # but here we choose 8 because the number of channels in efficientNets
-            # is only dividable by 8. If number of channels is smaller than that we 
-            # take the number of channels, that's why we apply a min.
-
-            # TODO: tune group size. 
-            # NAS width values were restricted to multiples of 8
-            after_conv_fc = nn.GroupNorm(
-                min(8, width_stage_one), 
-                width_stage_one, 
-                affine=True
+        
+        # DenseTransition if using DenseBlocks #
+        if self.dense: 
+            # recalculate the number of input features 
+            # depth_stage_zero (total num of blocks) + input channels (3 for CIFAR10)
+            width_stage_zero = width_stage_zero * depth_stage_zero + 3
+            # same as original Tranistion Layers in DenseNet
+            # features are halved through 1x1 Convs and AvgPool is used to halv the dims
+            self.dense_transition = nn.Sequential(
+                getAfterConvFc(after_conv_fc_str, width_stage_zero), 
+                nn.Conv2d(width_stage_zero, width_stage_zero//2, kernel_size=1, stride=1, bias=False),
+                nn.AvgPool2d(kernel_size=2, stride=2), 
             )
-        elif after_conv_fc_str == 'instance_norm':
-            after_conv_fc = nn.InstanceNorm2d(3)
-        elif after_conv_fc_str == 'max_pool': 
-            # keep dimensions for CIFAR10 dimenions assuming a downsampling 
-            # only through halving. 
-            after_conv_fc = nn.MaxPool2d(
-                kernel_size=3, 
-                stride=1, 
-                padding=1
-            )
-        elif after_conv_fc_str == 'avg_pool': 
-            # keep dimensions for CIFAR10 dimenions assuming a downsampling 
-            # only through halving. 
-            after_conv_fc = nn.AvgPool2d(
-                kernel_size=3, 
-                stride=1, 
-                padding=1
-            )
-        elif after_conv_fc_str == 'identity': 
-            after_conv_fc = nn.Identity()
+            width_stage_zero = width_stage_zero // 2
 
         self.stage_one = nn.Sequential(
             ResidualStack(
                 width_stage_zero,
                 width_stage_one,
                 halve_dim,
-                after_conv_fc, 
+                after_conv_fc_str, 
                 skip_depth, 
-                depth_stage_one
+                depth_stage_one, 
+                dense
             ),
         )   
+
+        if self.dense: 
+            self.pre_final = nn.AvgPool2d(kernel_size=2, stride=2)
+            self.width_stage_one = width_stage_one
 
         ## Final FC Block ##
         # output_dim is fixed to 4 (even if 8 makes more sense for the stage 1 StageConvModel)
@@ -616,8 +648,19 @@ class ENScalingResidualModel(nn.Module):
 
     def forward(self, x):
         batch_size = x.shape[0]
-        out = self.stage_zero(x) 
+        out = self.stage_zero(x)
+        # add dense transition layer if using dense connections; in this case
+        # no dim or feature reduction will happen in the stages themselves
+        if self.dense: 
+            out = self.dense_transition(out)
         out = self.stage_one(out) 
+        # as input to last FC layer only the output of the last conv_block 
+        # should be considered in the dense connection case
+        if self.dense: 
+            # last pooling layer to downsampling (same as in DenseNet)
+            out = self.pre_final(out)
+            # only get output of last conv layer
+            out = out[:, -self.width_stage_one:, :, :]
         out = self.adaptive_pool(out)
         out = out.view(batch_size, -1)
         out = self.relu1(self.fc1(out))
@@ -638,6 +681,7 @@ def get_model(
     halve_dim, 
     after_conv_fc_str, 
     skip_depth,
+    dense,
 ) -> nn.Module:
     model = None
     in_channels = None
@@ -677,12 +721,13 @@ def get_model(
     elif name=="en_scaling_residual_model":
         # img_dim is assumed to be 32 (but model works also with other img_dim)
         model = ENScalingResidualModel(
-            halve_dim, 
-            after_conv_fc_str, 
-            skip_depth, 
-            in_channels, 
-            depth, 
-            width
+            halve_dim=halve_dim, 
+            after_conv_fc_str=after_conv_fc_str, 
+            skip_depth=skip_depth, 
+            dense=dense,
+            in_channels=in_channels, 
+            depth=depth, 
+            width=width,
         )
     elif name=="resnet18":
         model = torchvision.models.resnet18(

@@ -57,3 +57,70 @@ def get_grad_norm(model, norm_type=2):
             2.0,
         ).item()
     return total_norm
+
+# used in models.py
+# Utility Modules, Functions
+class Lambda(nn.Module):
+    """
+    Module to encapsulate specific functions as modules. 
+    Good to easily integrate squeezing or padding functions.
+    """
+    def __init__(self, func):
+        super().__init__()
+        self.func = func
+
+    def forward(self, x):
+        return self.func(x)
+
+def getAfterConvFc(
+    after_conv_fc_str : str, 
+    num_features : int,
+    **kwargs
+    ): 
+    """
+    This is a helper function to return all the different after_conv_fcs
+    we want to consider. This is written in a dedicated function because
+    it is called from different classes and because this is the central place
+    where all possible after_conv_fct are listed.
+
+    Args: 
+        after_conv_fc_str: str to select the specific function
+        num_features: only necessary for norms 
+
+    """
+    if after_conv_fc_str == 'batch_norm':
+        after_conv_fc = nn.BatchNorm2d(
+            num_features=num_features
+        )
+    elif after_conv_fc_str == 'group_norm':
+        # for num_groups = num_features => LayerNorm
+        # for num_groups = 1 => InstanceNorm
+        after_conv_fc = nn.GroupNorm(
+            num_groups=min(8, num_features), 
+            num_channels=num_features, 
+            affine=True
+        )
+    elif after_conv_fc_str == 'instance_norm':
+        after_conv_fc = nn.InstanceNorm2d(
+            num_features=num_features,
+        )
+    elif after_conv_fc_str == 'max_pool': 
+        # keep dimensions for CIFAR10 dimenions assuming a downsampling 
+        # only through halving. 
+        after_conv_fc = nn.MaxPool2d(
+            kernel_size=3, 
+            stride=1, 
+            padding=1
+        )
+    elif after_conv_fc_str == 'avg_pool': 
+        # keep dimensions for CIFAR10 dimenions assuming a downsampling 
+        # only through halving. 
+        after_conv_fc = nn.AvgPool2d(
+            kernel_size=3, 
+            stride=1, 
+            padding=1
+        )
+    elif after_conv_fc_str == 'identity': 
+        after_conv_fc = nn.Identity()
+    
+    return after_conv_fc

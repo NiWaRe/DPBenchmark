@@ -719,6 +719,9 @@ def get_model(
     elif name=="densenet121": 
         model = timm.create_model("densenet121", pretrained=pretrained)
         model.classifier = nn.Linear(1024, output_classes)
+    elif name=="densenet201": 
+        model = timm.create_model("densenet201", pretrained=pretrained)
+        model.classifier = nn.Linear(1920, output_classes)
     elif name=="mobilenetv3_large_100": 
         model = timm.create_model("mobilenetv3_large_100", pretrained=pretrained)
         model.classifier = nn.Linear(1280, output_classes)

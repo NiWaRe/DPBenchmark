@@ -37,7 +37,7 @@ from pytorch_lightning.callbacks import LearningRateMonitor
 from pytorch_lightning.loggers import TensorBoardLogger
 from torchmetrics.functional import accuracy
 from pytorch_lightning.callbacks import ModelCheckpoint, model_checkpoint
-from utils import get_grad_norm
+from utils import get_grad_norm, initialize_weight
 
 # differential privacy
 from deepee import (PrivacyWrapper, PrivacyWatchdog, UniformDataLoader,
@@ -165,6 +165,9 @@ class LitModelDP(LightningModule):
             )
 
         print(self.model)
+
+        # add weight init
+        self.model.apply(initialize_weight)
 
         # disable auto. backward to be able to add noise and track 
         # the global grad norm (also in the non-dp case, lightning 
@@ -307,15 +310,15 @@ class LitModelDP(LightningModule):
         optims.update({'optimizer': optimizer})
 
         # learning rate scheduler
+        n_train_samples = 0
+        if self.hparams.data_name=="cifar10":
+            # val-split = 0.2, 50K training samples
+            n_train_samples = 40000
+        elif self.hparams.data_name=="mnist":
+            # val-split = 0.2, 60K training samples
+            n_train_samples = 48000
+        self.hparams.steps_per_epoch = n_train_samples // self.hparams.batch_size
         if self.hparams.lr_scheduler:
-            n_train_samples = 0
-            if self.hparams.data_name=="cifar10":
-                # val-split = 0.2, 50K training samples
-                n_train_samples = 40000
-            elif self.hparams.data_name=="mnist":
-                # val-split = 0.2, 60K training samples
-                n_train_samples = 48000
-            self.hparams.steps_per_epoch = n_train_samples // self.hparams.batch_size
             # scheduler_dict = {
             #     'scheduler': OneCycleLR(
             #         optimizer, 

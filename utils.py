@@ -124,3 +124,11 @@ def getAfterConvFc(
         after_conv_fc = nn.Identity()
     
     return after_conv_fc
+
+def initialize_weight(module):
+    if isinstance(module, (nn.Linear, nn.Conv2d)):
+        nn.init.xavier_uniform_(module.weight, gain=nn.init.calculate_gain("selu"))
+    # elif isinstance(module, nn.GroupNorm):
+    #     nn.init.xavier_uniform_(module.weight, 1)
+    #     nn.init.xavier_uniform_(module.bias, 0)
+        

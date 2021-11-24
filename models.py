@@ -381,13 +381,25 @@ class ResidualBlock(nn.Module):
         # initiative activation functions
         self.activation_fcs = nn.ModuleList(
             [
-                nn.ReLU()
+                nn.SELU()
                 for i in range(skip_depth)
             ]
             # extra handling of case with no skip connections
             if skip_depth else 
             [
-                nn.ReLU()
+                nn.SELU()
+            ]
+        )
+
+        # dropout
+        self.dropout_layers = nn.ModuleList(
+            [
+            nn.Dropout2d(0.3)
+            for i in range(skip_depth)
+            ]
+            if skip_depth else
+            [
+                nn.Dropout2d(0.3)
             ]
         )
 
@@ -398,6 +410,8 @@ class ResidualBlock(nn.Module):
             out = self.conv_layers[i](out)
             out = self.after_conv_fcs[i](out)
             out = self.activation_fcs[i](out)
+            # dropout in between conv blocks as done in WideResNet
+            #out = self.dropout_layers[i](out)
 
         # add last triple and connect input
         out = self.conv_layers[-1](out)
@@ -405,6 +419,8 @@ class ResidualBlock(nn.Module):
         if self.skip_depth: 
             out += self.skip(input)
         out = self.activation_fcs[-1](out)
+        # add the end of the block
+        out = self.dropout_layers[-1](out)
 
         return out
 
@@ -549,7 +565,7 @@ class ENScalingResidualModel(nn.Module):
             # same as original Tranistion Layers in DenseNet
             # features are halved through 1x1 Convs and AvgPool is used to halv the dims
             self.dense_transition = nn.Sequential(
-                getAfterConvFc(after_conv_fc_str, width_stage_zero), 
+                #getAfterConvFc(after_conv_fc_str, width_stage_zero), 
                 nn.Conv2d(width_stage_zero, width_stage_zero//2, kernel_size=1, stride=1, bias=False),
                 nn.AvgPool2d(kernel_size=2, stride=2), 
             )
@@ -579,8 +595,8 @@ class ENScalingResidualModel(nn.Module):
         self.fc1 = nn.Linear(width_stage_one*output_dim**2, 256)
         self.fc2 = nn.Linear(256, 128)
         self.fc3 = nn.Linear(128, 10)
-        self.relu1 = nn.ReLU()
-        self.relu2 = nn.ReLU()
+        self.relu1 = nn.SELU()
+        self.relu2 = nn.SELU()
 
     def forward(self, x):
         batch_size = x.shape[0]
@@ -674,6 +690,12 @@ def get_model(
         )
         model.maxpool = nn.Identity()
         model.fc = nn.Linear(512, output_classes)
+    elif name=="resnet50": 
+        model = timm.create_model("resnet50", pretrained=pretrained)
+        model.fc = nn.Linear(2048, output_classes)
+    elif name=="wide_resnet50_2": 
+        model = timm.create_model("wide_resnet50_2", pretrained=pretrained)
+        model.fc = nn.Linear(2048, output_classes)
     elif name=="vgg11":
         model = torchvision.models.vgg11(
             pretrained=pretrained

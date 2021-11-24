@@ -12,7 +12,7 @@ trainer:
     init_args:
       project: 'baseline'
       # TODO: automate this 
-      name: 'googlenet'
+      name: 'en_scaling_dense_model_MXP_d30_w20'
       # NOTE: Log checkpoints created by ModelCheckpoint as W&B artifacts. 
       # log_model: true
   checkpoint_callback: true
@@ -57,7 +57,7 @@ trainer:
   check_val_every_n_epoch: 1
   fast_dev_run: false
   accumulate_grad_batches: 1
-  max_epochs: 100
+  max_epochs: 30
   min_epochs: null
   max_steps: null
   min_steps: null
@@ -103,8 +103,9 @@ model:
 ################################
   including_test: true
   # possible models: see model.py
-    # resnet18, vgg11(_bn), inception_v4, densenet121, mobilenetv3_large_100, mobilenet_v3_small, 
-    # vit_base_patch16_224, simple_conv, stage_conv, en_scaling_base_model, en_scaling_residual_model, 
+    # resnet18, vgg11(_bn), inception_v4, densenet121, densenet201, wide_resnet50_2,
+    # mobilenetv3_large_100, mobilenet_v3_small, vit_base_patch16_224,
+    # simple_conv, stage_conv, en_scaling_base_model, en_scaling_residual_model, 
     # googlenet, xception, efficientnet_b[0-7]
     # any other model is tried to be created from the timm library
   model_name: 'en_scaling_residual_model'
@@ -115,25 +116,31 @@ model:
   # for stage_conv
   nr_stages: 1
   # for en_scaling_residual_model
-  dense: True
   halve_dim: True
   # possible choices: see models.py
     # norms: batch_norm, group_norm, instance_norm
     # pooling: max_pool, avg_pool
+    # combination: max_pool_gn
     # nothing: identity
-  after_conv_fc_str: 'group_norm'
-  skip_depth: 4
+  after_conv_fc_str: 'max_pool_gn'
+  skip_depth: 2
   # for en_scaling_*
-  depth: 8.0
-  width: 1.0
+  depth: 3.0
+  width: 2.0
+  dsc: True
+  # for dense components
+  # skip_depth and halve_dim will be ignored
+  # width ~ growing factor
+  # depth = num of Conv-AfterConvFc-Activation triples per DenseBlock
+  dense: True
   data_name: 'cifar10'
   # possible optims: sgd, adam
   optimizer: 'sgd'
   opt_kwargs: 
-    lr: 0.05 #0.5
+    lr: 0.05
   lr_scheduler: true
-  batch_size: 32 # some sweeps have 64 and 128 virtual batches!
-  virtual_batch_size: 64 
+  batch_size: 32
+  virtual_batch_size: 64
   # DP params
   # under model because I didn't want to overwrite the trainer class 
   # to include these arguments. I can access the params via the model 

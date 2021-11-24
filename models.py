@@ -301,6 +301,7 @@ class ResidualBlock(nn.Module):
         after_conv_fc_str: norm or pooling after Conv2D layer (BatchNorm2d, MaxPool, Identity)
         skip_depth: how much blocks skip connection should jump,
             2 = default, 0 = no skip connections
+        dsc: whether to use depthwise seperable convolutions or not
     """
 
     def __init__(
@@ -310,6 +311,7 @@ class ResidualBlock(nn.Module):
         halve_dim : bool, 
         after_conv_fc_str : str,
         skip_depth : int = 2,
+        dsc : bool = False,
     ):
         super().__init__()
         # save for turning on and off skip connection
@@ -341,6 +343,24 @@ class ResidualBlock(nn.Module):
                     stride = 2 if halve_dim else 1, 
                     padding = 0 if halve_dim else 1, 
                     bias=False
+                ) 
+                if not dsc else 
+                nn.Sequential(
+                    nn.Conv2d(
+                        in_channels, 
+                        in_channels, 
+                        groups=in_channels,
+                        kernel_size = 2 if halve_dim else 3, 
+                        stride = 2 if halve_dim else 1, 
+                        padding = 0 if halve_dim else 1, 
+                        bias=False, 
+                    ), 
+                    nn.Conv2d(
+                        in_channels, 
+                        out_channels, 
+                        kernel_size=1, 
+                        bias=False
+                    )
                 )
             ]
         )
@@ -356,6 +376,24 @@ class ResidualBlock(nn.Module):
                     stride=1, 
                     padding=1, 
                     bias=False
+                ) 
+                if not dsc else 
+                nn.Sequential(
+                    nn.Conv2d(
+                        out_channels, 
+                        out_channels, 
+                        groups=out_channels,
+                        kernel_size=3, 
+                        stride=1, 
+                        padding=1, 
+                        bias=False
+                    ), 
+                    nn.Conv2d(
+                        out_channels, 
+                        out_channels, 
+                        kernel_size=1, 
+                        bias=False
+                    )
                 )
                 for i in range(1, skip_depth)
             ]
@@ -437,6 +475,7 @@ class ResidualStack(nn.Module):
             2 = default, 0 = no skip connections
         num_blocks: Number of residual blocks
         dense: whether dense connections are used (in this case: skip_depth=0, halve_dim=False) 
+        dsc: whether to use depthwise seperable convolutions or not
     """
     
     def __init__(
@@ -448,6 +487,7 @@ class ResidualStack(nn.Module):
         skip_depth : int,
         num_blocks : int, 
         dense : bool,
+        dsc : bool
     ):
         super().__init__()
         self.dense = dense
@@ -461,7 +501,8 @@ class ResidualStack(nn.Module):
                     out_channels, 
                     halve_dim, 
                     after_conv_fc_str, 
-                    skip_depth
+                    skip_depth, 
+                    dsc
                 )
             ]
         )
@@ -474,7 +515,8 @@ class ResidualStack(nn.Module):
                     out_channels, 
                     False, 
                     after_conv_fc_str, 
-                    skip_depth
+                    skip_depth, 
+                    dsc
                 ) 
                 for i in range(1, num_blocks)
             ]
@@ -514,6 +556,7 @@ class ENScalingResidualModel(nn.Module):
         depth: a factor multiplied with number of conv blocks per stage of base model
         width: a factor multiplied with number of channels per conv block of base model
                 := num_blocks (as defined in the scaling approach)
+        dsc: whether depthwise seperable convolutions are used or normal convolutions
     """
     def __init__(
         self, 
@@ -524,6 +567,7 @@ class ENScalingResidualModel(nn.Module):
         in_channels: int = 3,
         depth: float = 1.0,
         width: float = 1.0,
+        dsc: bool = False,
         ):
         super(ENScalingResidualModel, self).__init__()
         self.dense = dense
@@ -547,7 +591,8 @@ class ENScalingResidualModel(nn.Module):
                 after_conv_fc_str, 
                 skip_depth, 
                 depth_stage_zero, 
-                dense
+                dense, 
+                dsc
             ),
         )
 
@@ -566,8 +611,17 @@ class ENScalingResidualModel(nn.Module):
             # features are halved through 1x1 Convs and AvgPool is used to halv the dims
             self.dense_transition = nn.Sequential(
                 #getAfterConvFc(after_conv_fc_str, width_stage_zero), 
-                nn.Conv2d(width_stage_zero, width_stage_zero//2, kernel_size=1, stride=1, bias=False),
-                nn.AvgPool2d(kernel_size=2, stride=2), 
+                nn.Conv2d(
+                    width_stage_zero, 
+                    width_stage_zero//2, 
+                    kernel_size=1, 
+                    stride=1, 
+                    bias=False
+                ),
+                nn.AvgPool2d(
+                    kernel_size=2, 
+                    stride=2
+                ), 
             )
             width_stage_zero = width_stage_zero // 2
 
@@ -579,7 +633,8 @@ class ENScalingResidualModel(nn.Module):
                 after_conv_fc_str, 
                 skip_depth, 
                 depth_stage_one, 
-                dense
+                dense, 
+                dsc
             ),
         )   
 
@@ -634,6 +689,7 @@ def get_model(
     after_conv_fc_str, 
     skip_depth,
     dense,
+    dsc
 ) -> nn.Module:
     model = None
     in_channels = None
@@ -680,6 +736,7 @@ def get_model(
             in_channels=in_channels, 
             depth=depth, 
             width=width,
+            dsc=dsc,
         )
     elif name=="resnet18":
         model = torchvision.models.resnet18(

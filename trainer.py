@@ -72,6 +72,7 @@ class LitModelDP(LightningModule):
         nr_stages: int = 1,
         depth: float = 1.0, 
         width: float = 1.0,
+        dsc: bool = False,
         dense: bool = False,
         halve_dim: bool = False, 
         after_conv_fc_str: str = "identity", 
@@ -110,6 +111,7 @@ class LitModelDP(LightningModule):
             nr_stages: how many stages in conv net 
             depth: factor to determine how many conv blocks per stage
             width: factor to determine how many filters per conv block 
+            dsc: whether to use depthwise seperable convolutions or normal convolutions
             dense: whether to use dense connections (implies halve_dim=False, skip_depth=0)
             halve_dim: whether in residual stack we also downsample or not
             after_conv_fc_str: what function to use after Conv2d (e.g. batchnorm, pool, identity)
@@ -151,6 +153,7 @@ class LitModelDP(LightningModule):
             after_conv_fc_str, 
             skip_depth,
             dense,
+            dsc
         )
         
         if dp_tool == "deepee": 
@@ -328,7 +331,7 @@ class LitModelDP(LightningModule):
             #     ),
             #     'interval': 'step',
             # }
-            nr_epochs = 1 if self.hparams.dp else 10
+            nr_epochs = 10 if self.hparams.dp else 10 # 3 davor
             scheduler_dict = {
                 'scheduler': StepLR(
                     optimizer, 

@@ -1,6 +1,8 @@
+from typing import Union
+
 import torch
 from torch import nn, Size
-from typing import Union
+from torch.nn.modules import activation
 
 from deepee import SurgicalProcedures
 from data import (
@@ -72,10 +74,29 @@ class Lambda(nn.Module):
     def forward(self, x):
         return self.func(x)
 
+def getActivationFunction(
+        activation_fc_str : str = "selu"
+    ): 
+    """
+    This is a helper function to return all the different activation functions
+    we want to consider. This is written in a dedicated function because
+    it is called from different classes and because this is the central place
+    where all possible activation_fc are listed.
+    """
+    if activation_fc_str == "selu": 
+        activation_fc = nn.SELU()
+    elif activation_fc_str == "relu": 
+        activation_fc = nn.ReLU()
+    elif activation_fc_str == "leaky_relu":
+        activation_fc = nn.LeakyReLU()
+
+    return activation_fc
+
+
 def getAfterConvFc(
-    after_conv_fc_str : str, 
-    num_features : int,
-    **kwargs
+        after_conv_fc_str : str, 
+        num_features : int,
+        **kwargs
     ): 
     """
     This is a helper function to return all the different after_conv_fcs
@@ -120,6 +141,21 @@ def getAfterConvFc(
             stride=1, 
             padding=1
         )
+    elif after_conv_fc_str == 'max_pool_gn': 
+        # keep dimensions for CIFAR10 dimenions assuming a downsampling 
+        # only through halving. 
+        after_conv_fc = nn.Sequential(
+            nn.MaxPool2d(
+                kernel_size=3, 
+                stride=1, 
+                padding=1
+            ), 
+            nn.GroupNorm(
+                num_groups=min(8, num_features), 
+                num_channels=num_features, 
+                affine=True
+            )
+        )
     elif after_conv_fc_str == 'identity': 
         after_conv_fc = nn.Identity()
     
@@ -128,7 +164,11 @@ def getAfterConvFc(
 def initialize_weight(module):
     if isinstance(module, (nn.Linear, nn.Conv2d)):
         nn.init.xavier_uniform_(module.weight, gain=nn.init.calculate_gain("selu"))
+        # nn.init.kaiming_normal_(module.weight, nonlinearity='leaky_relu')
     # elif isinstance(module, nn.GroupNorm):
     #     nn.init.xavier_uniform_(module.weight, 1)
     #     nn.init.xavier_uniform_(module.bias, 0)
         
+def normalize_weight(module):
+    if isinstance(module, (nn.Linear, nn.Conv2d)): 
+        nn.utils.weight_norm(module, name='weight')

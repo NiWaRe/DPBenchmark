@@ -24,7 +24,7 @@ from data import (
 from deepee import (PrivacyWrapper, PrivacyWatchdog, UniformDataLoader,
                      ModelSurgeon, SurgicalProcedures, watchdog)
 
-from utils import Lambda, getAfterConvFc
+from utils import Lambda, getAfterConvFc, getActivationFunction
 
 class SimpleConvNet(nn.Module):
     """
@@ -299,6 +299,7 @@ class ResidualBlock(nn.Module):
         out_channels: the number of channels after the first convolution
         halve_dim : whether to half the dimension in the last Conv2D
         after_conv_fc_str: norm or pooling after Conv2D layer (BatchNorm2d, MaxPool, Identity)
+        activation_fc_str: choose activation function
         skip_depth: how much blocks skip connection should jump,
             2 = default, 0 = no skip connections
         dsc: whether to use depthwise seperable convolutions or not
@@ -310,8 +311,9 @@ class ResidualBlock(nn.Module):
         out_channels : int,
         halve_dim : bool, 
         after_conv_fc_str : str,
+        activation_fc_str : str,
         skip_depth : int = 2,
-        dsc : bool = False,
+        dsc : bool = False,  
     ):
         super().__init__()
         # save for turning on and off skip connection
@@ -412,34 +414,39 @@ class ResidualBlock(nn.Module):
             # extra handling of case with no skip connections
             if skip_depth else 
             [
-                deepcopy(after_conv_fc)
+                after_conv_fc
             ]
         )
 
         # initiative activation functions
         self.activation_fcs = nn.ModuleList(
             [
-                nn.SELU()
+                deepcopy(
+                    getActivationFunction(activation_fc_str)
+                )
                 for i in range(skip_depth)
             ]
             # extra handling of case with no skip connections
             if skip_depth else 
             [
-                nn.SELU()
+                getActivationFunction(activation_fc_str)
             ]
         )
 
         # dropout
-        self.dropout_layers = nn.ModuleList(
-            [
-            nn.Dropout2d(0.3)
-            for i in range(skip_depth)
-            ]
-            if skip_depth else
-            [
-                nn.Dropout2d(0.3)
-            ]
-        )
+        # TODO: remove comment to use
+        # self.dropout_layers = nn.ModuleList(
+        #     [
+        #         deepcopy(
+        #             nn.Dropout2d(0.1)
+        #         )
+        #         for i in range(skip_depth)
+        #     ]
+        #     if skip_depth else
+        #     [
+        #         nn.Dropout2d(0.1)
+        #     ]
+        # )
 
     def forward(self, input):
         # go through all triples expect last one
@@ -449,6 +456,7 @@ class ResidualBlock(nn.Module):
             out = self.after_conv_fcs[i](out)
             out = self.activation_fcs[i](out)
             # dropout in between conv blocks as done in WideResNet
+            # TODO: remove comment to use
             #out = self.dropout_layers[i](out)
 
         # add last triple and connect input
@@ -458,7 +466,7 @@ class ResidualBlock(nn.Module):
             out += self.skip(input)
         out = self.activation_fcs[-1](out)
         # add the end of the block
-        out = self.dropout_layers[-1](out)
+        # out = self.dropout_layers[-1](out)
 
         return out
 
@@ -471,6 +479,7 @@ class ResidualStack(nn.Module):
         out_channels: The number of channels after the first layer
         halve_dim : whether to half the dimension in the last Conv2D
         after_conv_fc_str: norm or pooling after Conv2D layer (BatchNorm2d, MaxPool, Identity)
+        activation_fc_str: choose what activation function to use
         skip_depth: how much blocks skip connection should jump,
             2 = default, 0 = no skip connections
         num_blocks: Number of residual blocks
@@ -484,6 +493,7 @@ class ResidualStack(nn.Module):
         out_channels : int, 
         halve_dim : bool, 
         after_conv_fc_str : str,
+        activation_fc_str : str,
         skip_depth : int,
         num_blocks : int, 
         dense : bool,
@@ -497,12 +507,13 @@ class ResidualStack(nn.Module):
         self.residual_stack = nn.ModuleList(
             [
                 ResidualBlock(
-                    in_channels, 
-                    out_channels, 
-                    halve_dim, 
-                    after_conv_fc_str, 
-                    skip_depth, 
-                    dsc
+                    in_channels=in_channels, 
+                    out_channels=out_channels, 
+                    halve_dim=halve_dim, 
+                    after_conv_fc_str=after_conv_fc_str, 
+                    activation_fc_str=activation_fc_str,
+                    skip_depth=skip_depth, 
+                    dsc=dsc,
                 )
             ]
         )
@@ -511,12 +522,13 @@ class ResidualStack(nn.Module):
         self.residual_stack.extend(
             [
                 ResidualBlock(
-                    out_channels*i + in_channels if dense else out_channels, 
-                    out_channels, 
-                    False, 
-                    after_conv_fc_str, 
-                    skip_depth, 
-                    dsc
+                    in_channels=out_channels*i+in_channels if dense else out_channels, 
+                    out_channels=out_channels, 
+                    halve_dim=False, 
+                    after_conv_fc_str=after_conv_fc_str, 
+                    activation_fc_str=activation_fc_str,
+                    skip_depth=skip_depth, 
+                    dsc=dsc,
                 ) 
                 for i in range(1, num_blocks)
             ]
@@ -550,6 +562,7 @@ class ENScalingResidualModel(nn.Module):
     Args: 
         halve_dim : whether to half the dimension in the last Conv2D
         after_conv_fc: norm or pooling after Conv2D layer (BatchNorm2d, MaxPool, Identity)
+        activation_fc_str: choose activation function
         skip_depth: how much blocks skip connection should jump,
             2 = default, 0 = no skip connections
         dense: whether dense connections are used (skip_depth=0, halve_dim=False in this case)
@@ -562,6 +575,7 @@ class ENScalingResidualModel(nn.Module):
         self, 
         halve_dim : bool, 
         after_conv_fc_str : str,
+        activation_fc_str : str,
         skip_depth : int = 2, 
         dense : bool = False,
         in_channels: int = 3,
@@ -585,14 +599,15 @@ class ENScalingResidualModel(nn.Module):
 
         self.stage_zero = nn.Sequential(
             ResidualStack(
-                in_channels,
-                width_stage_zero,
-                halve_dim,
-                after_conv_fc_str, 
-                skip_depth, 
-                depth_stage_zero, 
-                dense, 
-                dsc
+                in_channels=in_channels,
+                out_channels=width_stage_zero,
+                halve_dim=halve_dim,
+                after_conv_fc_str=after_conv_fc_str, 
+                activation_fc_str=activation_fc_str,
+                skip_depth=skip_depth, 
+                num_blocks=depth_stage_zero, 
+                dense=dense, 
+                dsc=dsc,
             ),
         )
 
@@ -627,14 +642,15 @@ class ENScalingResidualModel(nn.Module):
 
         self.stage_one = nn.Sequential(
             ResidualStack(
-                width_stage_zero,
-                width_stage_one,
-                halve_dim,
-                after_conv_fc_str, 
-                skip_depth, 
-                depth_stage_one, 
-                dense, 
-                dsc
+                in_channels=width_stage_zero,
+                out_channels=width_stage_one,
+                halve_dim=halve_dim,
+                after_conv_fc_str=after_conv_fc_str, 
+                activation_fc_str=activation_fc_str,
+                skip_depth=skip_depth, 
+                num_blocks=depth_stage_one, 
+                dense=dense, 
+                dsc=dsc,
             ),
         )   
 
@@ -676,7 +692,7 @@ class ENScalingResidualModel(nn.Module):
         return out
 
 def get_model(
-    name, 
+    model_name, 
     pretrained, 
     num_classes, 
     data_name, 
@@ -687,6 +703,7 @@ def get_model(
     width,
     halve_dim, 
     after_conv_fc_str, 
+    activation_fc_str,
     skip_depth,
     dense,
     dsc
@@ -705,32 +722,33 @@ def get_model(
         img_dim = 28
         output_classes = 10
     # choose model
-    if name=="simple_conv": 
+    if model_name=="simple_conv": 
         model = SimpleConvNet(
             in_channels, 
             img_dim, 
             kernel_size, 
             conv_layers
         )
-    elif name=="stage_conv":
+    elif model_name=="stage_conv":
         model = StageConvNet(
             in_channels, 
             img_dim, 
             kernel_size, 
             nr_stages
         )
-    elif name=="en_scaling_base_model":
+    elif model_name=="en_scaling_base_model":
         # img_dim is assumed to be 32 (but model works also with other img_dim)
         model = ENScalingBaseModel(
             in_channels, 
             depth, 
             width,
         )
-    elif name=="en_scaling_residual_model":
+    elif model_name=="en_scaling_residual_model":
         # img_dim is assumed to be 32 (but model works also with other img_dim)
         model = ENScalingResidualModel(
             halve_dim=halve_dim, 
             after_conv_fc_str=after_conv_fc_str, 
+            activation_fc_str=activation_fc_str,
             skip_depth=skip_depth, 
             dense=dense,
             in_channels=in_channels, 
@@ -738,7 +756,7 @@ def get_model(
             width=width,
             dsc=dsc,
         )
-    elif name=="resnet18":
+    elif model_name=="resnet18":
         model = torchvision.models.resnet18(
             pretrained=pretrained
         )
@@ -747,13 +765,13 @@ def get_model(
         )
         model.maxpool = nn.Identity()
         model.fc = nn.Linear(512, output_classes)
-    elif name=="resnet50": 
+    elif model_name=="resnet50": 
         model = timm.create_model("resnet50", pretrained=pretrained)
         model.fc = nn.Linear(2048, output_classes)
-    elif name=="wide_resnet50_2": 
+    elif model_name=="wide_resnet50_2": 
         model = timm.create_model("wide_resnet50_2", pretrained=pretrained)
         model.fc = nn.Linear(2048, output_classes)
-    elif name=="vgg11":
+    elif model_name=="vgg11":
         model = torchvision.models.vgg11(
             pretrained=pretrained
         )
@@ -767,7 +785,7 @@ def get_model(
         )
         model.features[2] = nn.Identity()
         model.classifier[6] = nn.Linear(4096, output_classes)
-    elif name=="vgg11_bn":
+    elif model_name=="vgg11_bn":
         model = torchvision.models.vgg11_bn(
             pretrained=pretrained
         )
@@ -781,7 +799,7 @@ def get_model(
         )
         model.features[3] = nn.Identity()
         model.classifier[6] = nn.Linear(4096, output_classes)
-    elif name=="googlenet":
+    elif model_name=="googlenet":
         model = torchvision.models.googlenet(
             pretrained=pretrained,
         )
@@ -789,34 +807,34 @@ def get_model(
         # these outputs are not considered 
         # model.aux1.fc2 = nn.Linear(1024, 10)
         # model.aux2.fc2 = nn.Linear(1024, 10)
-    elif name=="xception":
+    elif model_name=="xception":
         model = timm.create_model('xception', pretrained=pretrained)
         model.fc = nn.Linear(2048, output_classes)
-    elif name=="inception_v4": 
+    elif model_name=="inception_v4": 
         model = timm.create_model("inception_v4", pretrained=pretrained)
         model.last_linear = nn.Linear(1536, output_classes)
-    elif name=="densenet121": 
+    elif model_name=="densenet121": 
         model = timm.create_model("densenet121", pretrained=pretrained)
         model.classifier = nn.Linear(1024, output_classes)
-    elif name=="densenet201": 
+    elif model_name=="densenet201": 
         model = timm.create_model("densenet201", pretrained=pretrained)
         model.classifier = nn.Linear(1920, output_classes)
-    elif name=="mobilenetv3_large_100": 
+    elif model_name=="mobilenetv3_large_100": 
         model = timm.create_model("mobilenetv3_large_100", pretrained=pretrained)
         model.classifier = nn.Linear(1280, output_classes)
-    elif name=="mobilenet_v3_small": 
+    elif model_name=="mobilenet_v3_small": 
         model = torchvision.models.mobilenet_v3_small(
             pretrained=pretrained,
         )
         model.classifier[3] = nn.Linear(1024, output_classes)
-    elif name=="vit_base_patch16_224":
+    elif model_name=="vit_base_patch16_224":
         model = timm.create_model('vit_base_patch16_224', pretrained=pretrained)
         model.head = nn.Linear(768, output_classes)
     # by default a timm model is created
     else: 
         # TODO: try out different pretrainings 
         # TODO check that batchnorm and data normalization works fine.
-        model = timm.create_model(name, pretrained=True)
+        model = timm.create_model(model_name, pretrained=True)
         # freezing model params
         # for param in model.parameters():
         #     param.requires_grad = False

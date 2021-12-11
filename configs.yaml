@@ -12,7 +12,7 @@ trainer:
     init_args:
       project: 'baseline'
       # TODO: automate this 
-      name: 'en_scaling_dense_model_MXP_d30_w20'
+      name: 'CondenseNetV1_GN_Scratch'
       # NOTE: Log checkpoints created by ModelCheckpoint as W&B artifacts. 
       # log_model: true
   checkpoint_callback: true
@@ -104,12 +104,15 @@ model:
   including_test: true
   # possible models: see model.py
     # resnet18, vgg11(_bn), inception_v4, densenet121, densenet201, wide_resnet50_2,
+    # condense_net_v1,
     # mobilenetv3_large_100, mobilenet_v3_small, vit_base_patch16_224,
     # simple_conv, stage_conv, en_scaling_base_model, en_scaling_residual_model, 
     # googlenet, xception, efficientnet_b[0-7]
     # any other model is tried to be created from the timm library
-  model_name: 'en_scaling_residual_model'
-  pretrained: True
+  model_name: 'condense_net_v1'
+  pretrained: False
+  weight_init: True # xavier_uniform (init for selu at the moment!)
+  weight_norm: False
   # for SimpleConvNet and DepthConvNet
   kernel_size: 3
   conv_layers: [16, 32]
@@ -117,17 +120,21 @@ model:
   nr_stages: 1
   # for en_scaling_residual_model
   halve_dim: True
-  # possible choices: see models.py
+  # possible choices: see utils.py
     # norms: batch_norm, group_norm, instance_norm
     # pooling: max_pool, avg_pool
     # combination: max_pool_gn
     # nothing: identity
   after_conv_fc_str: 'max_pool_gn'
+  # possible choices: see utils.py
+  # selu, relu, leaky_relu
+  activation_fc_str: 'selu'
   skip_depth: 2
   # for en_scaling_*
-  depth: 3.0
-  width: 2.0
-  dsc: True
+  depth: 4.0
+  width: 9.0
+  # depthwise seperable convolutions
+  dsc: False
   # for dense components
   # skip_depth and halve_dim will be ignored
   # width ~ growing factor
@@ -138,9 +145,12 @@ model:
   optimizer: 'sgd'
   opt_kwargs: 
     lr: 0.05
+    # optional
+    momentum: 0.9
+    weight_decay: 0.0002
   lr_scheduler: true
   batch_size: 32
-  virtual_batch_size: 64
+  virtual_batch_size: 64 # not using at the moment
   # DP params
   # under model because I didn't want to overwrite the trainer class 
   # to include these arguments. I can access the params via the model 
@@ -156,7 +166,7 @@ model:
   # TODO: with dp_tool this is probably not necessary anymore
   dp: false
   # NOTE: std of 0.1 yields good performance, >=0.2 not so good. vgg11 cifar10
-  L2_clip: 0.03 # ~ 50% of stationary value (assuming convergence in baseline training)
+  L2_clip: 9.972 # ~ 50% of stationary value (assuming convergence in baseline training)
   #noise_multiplier: 0.4272 # resnet: 0.5216, small_deep_conv: 0.438
   target_epsilon: 10.0
   abort: true

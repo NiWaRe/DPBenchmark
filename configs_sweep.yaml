@@ -37,7 +37,7 @@ trainer:
   check_val_every_n_epoch: 1
   fast_dev_run: false
   accumulate_grad_batches: 1
-  max_epochs: 50
+  max_epochs: 15
   min_epochs: null
   max_steps: null
   min_steps: null
@@ -84,12 +84,15 @@ model:
   including_test: true
   # possible models: see model.py
     # resnet18, vgg11(_bn), inception_v4, densenet121, densenet201, wide_resnet50_2,
+    # condense_net_v1,
     # mobilenetv3_large_100, mobilenet_v3_small, vit_base_patch16_224,
     # simple_conv, stage_conv, en_scaling_base_model, en_scaling_residual_model, 
     # googlenet, xception, efficientnet_b[0-7]
     # any other model is tried to be created from the timm library
-  model_name: 'en_scaling_residual_model'
-  pretrained: True
+  model_name: 'densenet121'
+  pretrained: False
+  weight_init: True # xavier_uniform (init for selu at the moment!)
+  weight_norm: False
   # for SimpleConvNet and DepthConvNet
   kernel_size: 3
   conv_layers: [16, 32]
@@ -97,17 +100,20 @@ model:
   nr_stages: 1
   # for en_scaling_residual_model
   halve_dim: True
-  # possible choices: see models.py
+  # possible choices: see utils.py
     # norms: batch_norm, group_norm, instance_norm
     # pooling: max_pool, avg_pool
     # combination: max_pool_gn
     # nothing: identity
   after_conv_fc_str: 'max_pool_gn'
+  # possible choices: see utils.py
+  # selu, relu, leaky_relu
+  activation_fc_str: 'selu'
   skip_depth: 2
   # for en_scaling_*
-  depth: 8.0
-  width: 5.0
-  dsc: True
+  depth: 4.0
+  width: 9.0
+  dsc: False
   # for dense components
   # skip_depth and halve_dim will be ignored
   # width ~ growing factor
@@ -125,14 +131,14 @@ model:
   optimizer: 'sgd'
   # NOTE: already set in sweep config
   opt_kwargs: 
-    lr: 0.02 #0.002
+    lr: 0.1 #0.002
   # optional
-    momentum: 0.9
-    weight_decay: 0.002 #0.0002
+    #momentum: 0.9
+    #weight_decay: 0.0002
   # the learning rate that was used for the sweep.
   lr_scheduler: true
-  batch_size: 128 #16
-  virtual_batch_size: 256 #32 # not using at the moment
+  batch_size: 64 #16
+  virtual_batch_size: 128 #32 # not using at the moment
   dp_tool: "opacus"
   dp: true
   # NOTE: already set in sweep config

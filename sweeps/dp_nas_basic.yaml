@@ -8,40 +8,39 @@ parameters:
   model.L2_clip:
     distribution: uniform
     # priors from Depth ConvNet General Sweep
-    max: 10.0 
+    # increase upper bound --> in current searches most models are all nearly 10.
+    max: 15.0 
     min: 0.01
-  trainer.max_epochs:
-    distribution: categorical
-    values: 
-      - 15
-      - 30
+  # trainer.max_epochs:
+  #   distribution: categorical
+  #   values: 
+  #     - 15
+  #     - 30
   # ConvNet params for 'en_scaling_residual_model'
   # halve_dim: True
-  model.after_conv_fc_str: 
-    distribution: categorical
-    values: 
-      - 'max_pool'
-      - 'group_norm'
-      - 'identity'
+  # model.after_conv_fc_str: 
+  #   distribution: categorical
+  #   values: 
+  #     - 'max_pool_gn'
+  #     - 'max_pool'
+  #     - 'group_norm'
+  #     - 'instance_norm'
     #- 'batch_norm_dp'
-  model.skip_depth: 
-    distribution: int_uniform
-    # range based on ResNet paper (using 2)
-    max: 4
-    min: 0
+  # model.skip_depth: 
+  #   distribution: int_uniform
+  #   # range based on ResNet paper (using 2)
+  #   max: 4
+  #   min: 0
   model.depth: 
     distribution: categorical
     # range from EfficientNet paper (1.0 - 8.0)
     values: 
       - 1.0
       - 2.0
-      - 3.0
       - 4.0
-      - 5.0
-      - 7.0
       - 8.0
-      - 9.0
-      - 10.0
+      - 16.0
+      - 32.0
   model.width: 
     # restrict to integers (not floats) in this search 
     # so that number of channels stays divisble by num groups
@@ -51,13 +50,10 @@ parameters:
     values: 
       - 1.0
       - 2.0
-      - 3.0
       - 4.0
-      - 5.0
-      - 7.0
       - 8.0
-      - 9.0
-      - 10.0
+      - 16.0
+      - 32.0
 program: trainer.py
 command:
   - ${env}

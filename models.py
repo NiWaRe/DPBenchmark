@@ -2,6 +2,7 @@
 from typing import List, Optional
 from copy import deepcopy
 from functools import partial
+import sys, os
 
 # general ml
 import numpy as np
@@ -24,7 +25,12 @@ from data import (
 from deepee import (PrivacyWrapper, PrivacyWatchdog, UniformDataLoader,
                      ModelSurgeon, SurgicalProcedures, watchdog)
 
+# own utility functions and classes
 from utils import Lambda, getAfterConvFc, getActivationFunction
+
+# additional models
+sys.path.append(os.path.join(os.path.dirname(__file__), 'local_models/CondenseNet'))
+from local_models.CondenseNet.models import condensenet # models/CondenseNet/models/condensenet.py
 
 class SimpleConvNet(nn.Module):
     """
@@ -434,7 +440,7 @@ class ResidualBlock(nn.Module):
         )
 
         # dropout
-        # TODO: remove comment to use
+        # TODO: remove comment to use dropout
         # self.dropout_layers = nn.ModuleList(
         #     [
         #         deepcopy(
@@ -691,6 +697,39 @@ class ENScalingResidualModel(nn.Module):
         out = self.fc3(out)
         return out
 
+# Extra Arguments Class for CondenseNet
+class Args: 
+    def __init__(
+        self, 
+        data: str, 
+        num_classes: int,
+        stages: List[int], 
+        growth: List[int], 
+        group_1x1: int, 
+        group_3x3: int, 
+        bottleneck: int, 
+        condense_factor: int, 
+        dropout_rate: int,
+    ) -> None:
+        # data for dimension 
+        self.data = data
+        # num classes
+        self.num_classes = num_classes
+        # per layer depth
+        self.stages = stages
+        # per layer growth 
+        self.growth = growth
+        # 1x1 group convolution (default: 4)
+        self.group_1x1 = group_1x1 
+        # 3x3 group convolution (default: 4)
+        self.group_3x3 = group_3x3
+        # bottleneck (default: 4)
+        self.bottleneck = bottleneck
+        # condense factor (default: 4)
+        self.condense_factor = condense_factor
+        # drop out (default: 0)
+        self.dropout_rate = dropout_rate
+
 def get_model(
     model_name, 
     pretrained, 
@@ -830,6 +869,31 @@ def get_model(
     elif model_name=="vit_base_patch16_224":
         model = timm.create_model('vit_base_patch16_224', pretrained=pretrained)
         model.head = nn.Linear(768, output_classes)
+    elif model_name=="condense_net_v1": 
+        # use standard configurations from official repo ShichenLiu/CondenseNet
+        args = Args(
+            # data for dimension 
+            data = data_name,
+            # num classes
+            num_classes = output_classes,
+            # per layer depth
+            stages = [14, 14, 14],
+            # per layer growth 
+            growth = [8, 16, 32],
+            # 1x1 group convolution (default: 4)
+            # NOTE: opacus doesn't support Conv2d groups != 1 or in_channels
+            group_1x1 = 1, 
+            # 3x3 group convolution (default: 4)
+            # NOTE: opacus doesn't support Conv2d groups != 1 or in_channels
+            group_3x3 = 1,
+            # bottleneck (default: 4)
+            bottleneck = 4,
+            # condense factor (default: 4)
+            condense_factor = 4,
+            # drop out (default: 0)
+            dropout_rate = 0,
+        )
+        model = condensenet(args)
     # by default a timm model is created
     else: 
         # TODO: try out different pretrainings 

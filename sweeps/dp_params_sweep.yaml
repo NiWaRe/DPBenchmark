@@ -23,11 +23,12 @@ parameters:
   #   distribution: int_uniform
   #   max: 64
   #   min: 8
-  # NOTE: uncomment if this should be considered
+  # NOTE: more options could be added for final searches
   trainer.max_epochs:
-    distribution: int_uniform
-    max: 30
-    min: 15
+    distribution: categorical
+    values: 
+    - 15
+    - 30
   # model.target_delta:
   #   distribution: uniform
   #   max: 2e-05

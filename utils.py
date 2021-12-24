@@ -106,7 +106,7 @@ def getAfterConvFc(
 
     Args: 
         after_conv_fc_str: str to select the specific function
-        num_features: only necessary for norms 
+        num_features: number of channels, only necessary for norms 
 
     """
     if after_conv_fc_str == 'batch_norm':
@@ -122,8 +122,20 @@ def getAfterConvFc(
             affine=True
         )
     elif after_conv_fc_str == 'instance_norm':
+        # could also use GN with num_groups=num_channels
         after_conv_fc = nn.InstanceNorm2d(
             num_features=num_features,
+        )
+    elif after_conv_fc_str == 'layer_norm':
+        # could also use nn.LayerNorm, but we would need
+        # complete input dimension for that (possible but more work)
+        # after_conv_fc = nn.LayerNorm(
+        #     normalized_shape=input_shape[1:],
+        # )
+        after_conv_fc = nn.GroupNorm(
+            num_groups=1, 
+            num_channels=num_features, 
+            affine=True
         )
     elif after_conv_fc_str == 'max_pool': 
         # keep dimensions for CIFAR10 dimenions assuming a downsampling 
@@ -163,7 +175,7 @@ def getAfterConvFc(
 
 def initialize_weight(module):
     if isinstance(module, (nn.Linear, nn.Conv2d)):
-        nn.init.xavier_uniform_(module.weight, gain=nn.init.calculate_gain("selu"))
+        nn.init.xavier_uniform_(module.weight, gain=nn.init.calculate_gain("relu"))
         # nn.init.kaiming_normal_(module.weight, nonlinearity='leaky_relu')
     # elif isinstance(module, nn.GroupNorm):
     #     nn.init.xavier_uniform_(module.weight, 1)

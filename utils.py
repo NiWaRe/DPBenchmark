@@ -116,8 +116,25 @@ def getAfterConvFc(
     elif after_conv_fc_str == 'group_norm':
         # for num_groups = num_features => LayerNorm
         # for num_groups = 1 => InstanceNorm
+        min_num_groups = 8
+        # TODO: the auto. adaptation of num_groups decreases
+        # which means that GN tends to converge to LN, think about
+        # something more balanced.
+        # if not num_features%8:
+        #     # if divisble by 2
+        #     if not num_features%2:
+        #         div = 8
+        #         while num_features%div:
+        #             div -= 2
+        #         min_num_groups = div
+        #     # if not divisble by 2
+        #     else: 
+        #         div = 7
+        #         while num_features%div:
+        #             div -= 2
+        #         min_num_groups = div
         after_conv_fc = nn.GroupNorm(
-            num_groups=min(8, num_features), 
+            num_groups=min(min_num_groups, num_features), 
             num_channels=num_features, 
             affine=True
         )
@@ -153,20 +170,20 @@ def getAfterConvFc(
             stride=1, 
             padding=1
         )
-    elif after_conv_fc_str == 'max_pool_gn': 
+    elif after_conv_fc_str == 'gn_mxp': 
         # keep dimensions for CIFAR10 dimenions assuming a downsampling 
         # only through halving. 
         after_conv_fc = nn.Sequential(
-            nn.MaxPool2d(
-                kernel_size=3, 
-                stride=1, 
-                padding=1
-            ), 
             nn.GroupNorm(
                 num_groups=min(8, num_features), 
                 num_channels=num_features, 
                 affine=True
-            )
+            ),
+            nn.MaxPool2d(
+                kernel_size=3, 
+                stride=1, 
+                padding=1
+            ),
         )
     elif after_conv_fc_str == 'identity': 
         after_conv_fc = nn.Identity()

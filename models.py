@@ -672,8 +672,12 @@ class ENScalingResidualModel(nn.Module):
         self.fc1 = nn.Linear(width_stage_one*output_dim**2, 256)
         self.fc2 = nn.Linear(256, 128)
         self.fc3 = nn.Linear(128, 10)
-        self.relu1 = nn.SELU()
-        self.relu2 = nn.SELU()
+        if activation_fc_str == "selu":
+            self.relu1 = nn.SELU()
+            self.relu2 = nn.SELU()
+        else:
+            self.relu1 = nn.ReLU()
+            self.relu2 = nn.ReLU()
 
     def forward(self, x):
         batch_size = x.shape[0]
@@ -844,8 +848,8 @@ def get_model(
         )
         model.fc = nn.Linear(1024, output_classes)
         # these outputs are not considered 
-        # model.aux1.fc2 = nn.Linear(1024, 10)
-        # model.aux2.fc2 = nn.Linear(1024, 10)
+        model.aux1.fc2 = nn.Linear(1024, 10)
+        model.aux2.fc2 = nn.Linear(1024, 10)
     elif model_name=="xception":
         model = timm.create_model('xception', pretrained=pretrained)
         model.fc = nn.Linear(2048, output_classes)

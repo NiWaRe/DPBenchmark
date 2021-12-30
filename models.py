@@ -4,9 +4,10 @@ from copy import deepcopy
 from functools import partial
 import sys, os
 
-# general ml
+# general ml and model libraries
 import numpy as np
 import timm
+from pytorchcv.model_provider import get_model as ptcv_get_model
 
 # torch 
 import torch
@@ -848,8 +849,8 @@ def get_model(
         )
         model.fc = nn.Linear(1024, output_classes)
         # these outputs are not considered 
-        model.aux1.fc2 = nn.Linear(1024, 10)
-        model.aux2.fc2 = nn.Linear(1024, 10)
+        model.aux1.fc2 = nn.Linear(1024, output_classes)
+        model.aux2.fc2 = nn.Linear(1024, output_classes)
     elif model_name=="xception":
         model = timm.create_model('xception', pretrained=pretrained)
         model.fc = nn.Linear(2048, output_classes)
@@ -862,6 +863,20 @@ def get_model(
     elif model_name=="densenet201": 
         model = timm.create_model("densenet201", pretrained=pretrained)
         model.classifier = nn.Linear(1920, output_classes)
+    elif model_name=="mobilenetv1_w1":
+        # width_scale=1.0 (can be changed deliberately if pretrained=False)
+        model = ptcv_get_model(
+            "mobilenet_w1", 
+            pretrained=pretrained, 
+            num_classes=output_classes,
+        )
+        # to make it work with CIFAR10 turn three last stride 2 convs to stride 1 convs
+        model.features.stage3.unit1.dw_conv.conv = nn.Conv2d(128, 128, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), groups=128, bias=False)
+        model.features.stage4.unit1.dw_conv.conv = nn.Conv2d(256, 256, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), groups=256, bias=False)
+        model.features.stage5.unit1.dw_conv.conv = nn.Conv2d(512, 512, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), groups=512, bias=False)
+        # bc of this we also have to change the final layer
+        model.output = nn.Linear(4096, output_classes)
+
     elif model_name=="mobilenetv3_large_100": 
         model = timm.create_model("mobilenetv3_large_100", pretrained=pretrained)
         model.classifier = nn.Linear(1280, output_classes)

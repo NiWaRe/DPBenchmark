@@ -37,7 +37,7 @@ trainer:
   check_val_every_n_epoch: 1
   fast_dev_run: false
   accumulate_grad_batches: 1
-  max_epochs: 15
+  max_epochs: 30
   min_epochs: null
   max_steps: null
   min_steps: null
@@ -84,14 +84,14 @@ model:
   including_test: true
   # possible models: see model.py
     # resnet18, vgg11(_bn), inception_v4, densenet121, densenet201, wide_resnet50_2,
-    # condense_net_v1,
+    # condense_net_v1,mobilenetv1_w1, mobilenetv1_w025, mobilenetv1_w050, mobilenetv1_w075
     # mobilenetv3_large_100, mobilenet_v3_small, vit_base_patch16_224,
     # simple_conv, stage_conv, en_scaling_base_model, en_scaling_residual_model, 
     # googlenet, xception, efficientnet_b[0-7]
     # any other model is tried to be created from the timm library
-  model_name: 'densenet121'
+  model_name: 'mobilenetv1_w050'
   pretrained: False
-  weight_init: True # xavier_uniform (init for selu at the moment!)
+  weight_init: False # xavier_uniform (init for selu at the moment!)
   weight_norm: False
   # for SimpleConvNet and DepthConvNet
   kernel_size: 3
@@ -101,24 +101,24 @@ model:
   # for en_scaling_residual_model
   halve_dim: True
   # possible choices: see utils.py
-    # norms: batch_norm, group_norm, instance_norm
+    # norms: batch_norm, group_norm, instance_norm, layer_norm
     # pooling: max_pool, avg_pool
-    # combination: max_pool_gn
+    # combination: mxp_gn
     # nothing: identity
-  after_conv_fc_str: 'max_pool_gn'
+  after_conv_fc_str: 'mxp_gn'
   # possible choices: see utils.py
   # selu, relu, leaky_relu
-  activation_fc_str: 'selu'
+  activation_fc_str: 'relu'
   skip_depth: 2
   # for en_scaling_*
-  depth: 4.0
-  width: 9.0
+  depth: 8.0
+  width: 1.0
   dsc: False
   # for dense components
   # skip_depth and halve_dim will be ignored
   # width ~ growing factor
   # depth = num of Conv-AfterConvFc-Activation triples per DenseBlock
-  dense: True
+  dense: False
   # NOTE: this is only relevant for the deepee DP tool
   # possible surgeries: see surgery.py
   # NOTE: comment out if not needed
@@ -137,8 +137,8 @@ model:
     #weight_decay: 0.0002
   # the learning rate that was used for the sweep.
   lr_scheduler: true
-  batch_size: 64 #16
-  virtual_batch_size: 128 #32 # not using at the moment
+  batch_size: 128 #64 #128 #16
+  virtual_batch_size: 128 #256 #32 # not using at the moment
   dp_tool: "opacus"
   dp: true
   # NOTE: already set in sweep config

@@ -865,6 +865,7 @@ def get_model(
         model.classifier = nn.Linear(1920, output_classes)
     elif model_name=="mobilenetv1_w1":
         # width_scale=1.0 (can be changed deliberately if pretrained=False)
+        # we could simply muliply the number of in- and output filters and the num of groups with w (0, 1]
         model = ptcv_get_model(
             "mobilenet_w1", 
             pretrained=pretrained, 
@@ -876,7 +877,48 @@ def get_model(
         model.features.stage5.unit1.dw_conv.conv = nn.Conv2d(512, 512, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), groups=512, bias=False)
         # bc of this we also have to change the final layer
         model.output = nn.Linear(4096, output_classes)
-
+    elif model_name=="mobilenetv1_w025":
+        # width_scale=0.25 (can be changed deliberately if pretrained=False)
+        # we could simply muliply the number of in- and output filters and the num of groups with w (0, 1]
+        model = ptcv_get_model(
+            "mobilenet_wd4", 
+            pretrained=pretrained, 
+            num_classes=output_classes,
+        )
+        # to make it work with CIFAR10 turn three last stride 2 convs to stride 1 convs
+        model.features.stage3.unit1.dw_conv.conv = nn.Conv2d(32, 32, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), groups=32, bias=False)
+        model.features.stage4.unit1.dw_conv.conv = nn.Conv2d(64, 64, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), groups=64, bias=False)
+        model.features.stage5.unit1.dw_conv.conv = nn.Conv2d(128, 128, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), groups=128, bias=False)
+        # bc of this we also have to change the final layer
+        model.output = nn.Linear(int(0.25*4096), output_classes)
+    elif model_name=="mobilenetv1_w050":
+        # width_scale=0.50 (can be changed deliberately if pretrained=False)
+        # we could simply muliply the number of in- and output filters and the num of groups with w (0, 1]
+        model = ptcv_get_model(
+            "mobilenet_wd2", 
+            pretrained=pretrained, 
+            num_classes=output_classes,
+        )
+        # to make it work with CIFAR10 turn three last stride 2 convs to stride 1 convs
+        model.features.stage3.unit1.dw_conv.conv = nn.Conv2d(64, 64, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), groups=64, bias=False)
+        model.features.stage4.unit1.dw_conv.conv = nn.Conv2d(128, 128, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), groups=128, bias=False)
+        model.features.stage5.unit1.dw_conv.conv = nn.Conv2d(256, 256, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), groups=256, bias=False)
+        # bc of this we also have to change the final layer
+        model.output = nn.Linear(int(0.50*4096), output_classes)
+    elif model_name=="mobilenetv1_w075":
+        # width_scale=0.75 (can be changed deliberately if pretrained=False)
+        # we could simply muliply the number of in- and output filters and the num of groups with w (0, 1]
+        model = ptcv_get_model(
+            "mobilenet_w3d4", 
+            pretrained=pretrained, 
+            num_classes=output_classes,
+        )
+        # to make it work with CIFAR10 turn three last stride 2 convs to stride 1 convs
+        model.features.stage3.unit1.dw_conv.conv = nn.Conv2d(96, 96, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), groups=96, bias=False)
+        model.features.stage4.unit1.dw_conv.conv = nn.Conv2d(192, 192, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), groups=192, bias=False)
+        model.features.stage5.unit1.dw_conv.conv = nn.Conv2d(384, 384, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), groups=384, bias=False)
+        # bc of this we also have to change the final layer
+        model.output = nn.Linear(int(0.75*4096), output_classes)
     elif model_name=="mobilenetv3_large_100": 
         model = timm.create_model("mobilenetv3_large_100", pretrained=pretrained)
         model.classifier = nn.Linear(1280, output_classes)

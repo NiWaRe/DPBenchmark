@@ -819,20 +819,17 @@ def get_model(
         model = torchvision.models.vgg11(
             pretrained=pretrained
         )
-        model.features[0] = nn.Conv2d(
-            in_channels, 
-            64, 
-            kernel_size=3, 
-            stride=1, 
-            padding=1, 
-            bias=False
-        )
-        model.features[2] = nn.Identity()
+        if data_name=="CIFAR10":
+            # remove the last three downsampling to stay at two
+            model.features[10] = nn.MaxPool2d(kernel_size=2, stride=1, padding=0, dilation=1, ceil_mode=False)
+            model.features[15] = nn.MaxPool2d(kernel_size=2, stride=1, padding=0, dilation=1, ceil_mode=False)
+            model.features[20] = nn.MaxPool2d(kernel_size=2, stride=1, padding=0, dilation=1, ceil_mode=False)
         model.classifier[6] = nn.Linear(4096, output_classes)
     elif model_name=="vgg11_bn":
         model = torchvision.models.vgg11_bn(
             pretrained=pretrained
         )
+        # NOTE: adapt this to the upper model if wanted
         model.features[0] = nn.Conv2d(
             in_channels, 
             64, 
@@ -848,7 +845,7 @@ def get_model(
             pretrained=pretrained,
         )
         model.fc = nn.Linear(1024, output_classes)
-        # these outputs are not considered 
+        # the auxiliary classifiers
         model.aux1.fc2 = nn.Linear(1024, output_classes)
         model.aux2.fc2 = nn.Linear(1024, output_classes)
     elif model_name=="xception":
@@ -871,10 +868,11 @@ def get_model(
             pretrained=pretrained, 
             num_classes=output_classes,
         )
-        # to make it work with CIFAR10 turn three last stride 2 convs to stride 1 convs
-        model.features.stage3.unit1.dw_conv.conv = nn.Conv2d(128, 128, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), groups=128, bias=False)
-        model.features.stage4.unit1.dw_conv.conv = nn.Conv2d(256, 256, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), groups=256, bias=False)
-        model.features.stage5.unit1.dw_conv.conv = nn.Conv2d(512, 512, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), groups=512, bias=False)
+        if data_name=="CIFAR10":
+            # to make it work with CIFAR10 turn three last stride 2 convs to stride 1 convs
+            model.features.stage3.unit1.dw_conv.conv = nn.Conv2d(128, 128, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), groups=128, bias=False)
+            model.features.stage4.unit1.dw_conv.conv = nn.Conv2d(256, 256, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), groups=256, bias=False)
+            model.features.stage5.unit1.dw_conv.conv = nn.Conv2d(512, 512, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), groups=512, bias=False)
         # bc of this we also have to change the final layer
         model.output = nn.Linear(4096, output_classes)
     elif model_name=="mobilenetv1_w025":
@@ -885,10 +883,11 @@ def get_model(
             pretrained=pretrained, 
             num_classes=output_classes,
         )
-        # to make it work with CIFAR10 turn three last stride 2 convs to stride 1 convs
-        model.features.stage3.unit1.dw_conv.conv = nn.Conv2d(32, 32, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), groups=32, bias=False)
-        model.features.stage4.unit1.dw_conv.conv = nn.Conv2d(64, 64, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), groups=64, bias=False)
-        model.features.stage5.unit1.dw_conv.conv = nn.Conv2d(128, 128, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), groups=128, bias=False)
+        if data_name=="CIFAR10":
+            # to make it work with CIFAR10 turn three last stride 2 convs to stride 1 convs
+            model.features.stage3.unit1.dw_conv.conv = nn.Conv2d(32, 32, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), groups=32, bias=False)
+            model.features.stage4.unit1.dw_conv.conv = nn.Conv2d(64, 64, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), groups=64, bias=False)
+            model.features.stage5.unit1.dw_conv.conv = nn.Conv2d(128, 128, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), groups=128, bias=False)
         # bc of this we also have to change the final layer
         model.output = nn.Linear(int(0.25*4096), output_classes)
     elif model_name=="mobilenetv1_w050":
@@ -899,10 +898,11 @@ def get_model(
             pretrained=pretrained, 
             num_classes=output_classes,
         )
-        # to make it work with CIFAR10 turn three last stride 2 convs to stride 1 convs
-        model.features.stage3.unit1.dw_conv.conv = nn.Conv2d(64, 64, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), groups=64, bias=False)
-        model.features.stage4.unit1.dw_conv.conv = nn.Conv2d(128, 128, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), groups=128, bias=False)
-        model.features.stage5.unit1.dw_conv.conv = nn.Conv2d(256, 256, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), groups=256, bias=False)
+        if data_name=="CIFAR10":
+            # to make it work with CIFAR10 turn three last stride 2 convs to stride 1 convs
+            model.features.stage3.unit1.dw_conv.conv = nn.Conv2d(64, 64, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), groups=64, bias=False)
+            model.features.stage4.unit1.dw_conv.conv = nn.Conv2d(128, 128, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), groups=128, bias=False)
+            model.features.stage5.unit1.dw_conv.conv = nn.Conv2d(256, 256, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), groups=256, bias=False)
         # bc of this we also have to change the final layer
         model.output = nn.Linear(int(0.50*4096), output_classes)
     elif model_name=="mobilenetv1_w075":
@@ -913,10 +913,11 @@ def get_model(
             pretrained=pretrained, 
             num_classes=output_classes,
         )
-        # to make it work with CIFAR10 turn three last stride 2 convs to stride 1 convs
-        model.features.stage3.unit1.dw_conv.conv = nn.Conv2d(96, 96, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), groups=96, bias=False)
-        model.features.stage4.unit1.dw_conv.conv = nn.Conv2d(192, 192, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), groups=192, bias=False)
-        model.features.stage5.unit1.dw_conv.conv = nn.Conv2d(384, 384, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), groups=384, bias=False)
+        if data_name=="CIFAR10":
+            # to make it work with CIFAR10 turn three last stride 2 convs to stride 1 convs
+            model.features.stage3.unit1.dw_conv.conv = nn.Conv2d(96, 96, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), groups=96, bias=False)
+            model.features.stage4.unit1.dw_conv.conv = nn.Conv2d(192, 192, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), groups=192, bias=False)
+            model.features.stage5.unit1.dw_conv.conv = nn.Conv2d(384, 384, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), groups=384, bias=False)
         # bc of this we also have to change the final layer
         model.output = nn.Linear(int(0.75*4096), output_classes)
     elif model_name=="mobilenetv3_large_100": 

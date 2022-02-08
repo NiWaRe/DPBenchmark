@@ -801,14 +801,80 @@ def get_model(
             dsc=dsc,
         )
     elif model_name=="resnet18":
-        model = torchvision.models.resnet18(
-            pretrained=pretrained
+        # model = torchvision.models.resnet18(
+        #     pretrained=pretrained
+        # )
+        # if data_name=="cifar10":
+        #     model.conv1 = nn.Conv2d(
+        #         in_channels, 64, kernel_size=3, stride=1, padding=1, bias=False
+        #     )
+        #     model.maxpool = nn.Identity()
+        #     model.fc = nn.Linear(512, output_classes)
+        # NOTE: use pytorchcv so that all different width architectures have same origin
+        model = ptcv_get_model(
+            "resnet18", 
+            pretrained=pretrained, 
+            num_classes=output_classes,
         )
-        model.conv1 = nn.Conv2d(
-            in_channels, 64, kernel_size=3, stride=1, padding=1, bias=False
+        w = 1
+        if data_name=="cifar10":
+            model.features.init_block.conv = nn.Conv2d(
+                in_channels, int(w*64), kernel_size=3, stride=1, padding=1, bias=False
+            )
+            model.features.init_block.pool = nn.Identity()
+            model.features.final_pool = nn.AdaptiveAvgPool2d(output_size=(1,1))
+    elif model_name=="resnet18_w3d4":
+        model = ptcv_get_model(
+            "resnet18_w3d4", 
+            pretrained=pretrained, 
+            num_classes=output_classes,
         )
-        model.maxpool = nn.Identity()
-        model.fc = nn.Linear(512, output_classes)
+        w = 0.75
+        if data_name=="cifar10":
+            model.features.init_block.conv = nn.Conv2d(
+                in_channels, int(w*64), kernel_size=3, stride=1, padding=1, bias=False
+            )
+            model.features.init_block.pool = nn.Identity()
+            model.features.final_pool = nn.AdaptiveAvgPool2d(output_size=(1,1))
+    elif model_name=="resnet18_wd2":
+        model = ptcv_get_model(
+            "resnet18_wd2", 
+            pretrained=pretrained, 
+            num_classes=output_classes,
+        )
+        w = 0.5
+        if data_name=="cifar10":
+            model.features.init_block.conv = nn.Conv2d(
+                in_channels, int(w*64), kernel_size=3, stride=1, padding=1, bias=False
+            )
+            model.features.init_block.pool = nn.Identity()
+            # model.features.stage3.unit1.body.conv1.conv = nn.Conv2d(
+            #     int(w*128), int(w*256), kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), bias=False
+            # )
+            # model.features.stage3.unit1.identity_conv.conv = nn.Conv2d(
+            #     int(w*128), int(w*256), kernel_size=(1, 1), stride=(1, 1), bias=False
+            # )
+            # model.features.stage4.unit1.body.conv1.conv = nn.Conv2d(
+            #     int(w*256), int(w*512), kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), bias=False
+            # )
+            # model.features.stage4.unit1.identity_conv.conv = nn.Conv2d(
+            #     int(w*256), int(w* 512), kernel_size=(1, 1), stride=(1, 1), bias=False
+            # )
+            # model.features.stage4.unit2.identity_conv = nn.Identity()
+            model.features.final_pool = nn.AdaptiveAvgPool2d(output_size=(1,1))
+    elif model_name=="resnet18_wd4":
+        model = ptcv_get_model(
+            "resnet18_wd4", 
+            pretrained=pretrained, 
+            num_classes=output_classes,
+        )
+        w = 0.25
+        if data_name=="cifar10":
+            model.features.init_block.conv = nn.Conv2d(
+                in_channels, int(w*64), kernel_size=3, stride=1, padding=1, bias=False
+            )
+            model.features.init_block.pool = nn.Identity()
+            model.features.final_pool = nn.AdaptiveAvgPool2d(output_size=(1,1))
     elif model_name=="resnet50": 
         model = timm.create_model("resnet50", pretrained=pretrained)
         model.fc = nn.Linear(2048, output_classes)
@@ -819,7 +885,7 @@ def get_model(
         model = torchvision.models.vgg11(
             pretrained=pretrained
         )
-        if data_name=="CIFAR10":
+        if data_name=="cifar10":
             # remove the last three downsampling to stay at two
             model.features[10] = nn.MaxPool2d(kernel_size=2, stride=1, padding=0, dilation=1, ceil_mode=False)
             model.features[15] = nn.MaxPool2d(kernel_size=2, stride=1, padding=0, dilation=1, ceil_mode=False)
@@ -855,8 +921,21 @@ def get_model(
         model = timm.create_model("inception_v4", pretrained=pretrained)
         model.last_linear = nn.Linear(1536, output_classes)
     elif model_name=="densenet121": 
-        model = timm.create_model("densenet121", pretrained=pretrained)
-        model.classifier = nn.Linear(1024, output_classes)
+        w = 1.0
+        model = timm.create_model("densenet121", pretrained=pretrained, width_factor=w)
+        model.classifier = nn.Linear(int(w*1024), output_classes)
+    elif model_name=="densenet121_w075": 
+        w = 0.75
+        model = timm.create_model("densenet121", pretrained=pretrained, width_factor=w)
+        model.classifier = nn.Linear(int(w*1024), output_classes)
+    elif model_name=="densenet121_w050": 
+        w = 0.50
+        model = timm.create_model("densenet121", pretrained=pretrained, width_factor=w)
+        model.classifier = nn.Linear(int(w*1024), output_classes)
+    elif model_name=="densenet121_w025": 
+        w = 0.25
+        model = timm.create_model("densenet121", pretrained=pretrained, width_factor=w)
+        model.classifier = nn.Linear(int(w*1024), output_classes)
     elif model_name=="densenet201": 
         model = timm.create_model("densenet201", pretrained=pretrained)
         model.classifier = nn.Linear(1920, output_classes)
@@ -868,7 +947,7 @@ def get_model(
             pretrained=pretrained, 
             num_classes=output_classes,
         )
-        if data_name=="CIFAR10":
+        if data_name=="cifar10":
             # to make it work with CIFAR10 turn three last stride 2 convs to stride 1 convs
             model.features.stage3.unit1.dw_conv.conv = nn.Conv2d(128, 128, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), groups=128, bias=False)
             model.features.stage4.unit1.dw_conv.conv = nn.Conv2d(256, 256, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), groups=256, bias=False)
@@ -883,7 +962,7 @@ def get_model(
             pretrained=pretrained, 
             num_classes=output_classes,
         )
-        if data_name=="CIFAR10":
+        if data_name=="cifar10":
             # to make it work with CIFAR10 turn three last stride 2 convs to stride 1 convs
             model.features.stage3.unit1.dw_conv.conv = nn.Conv2d(32, 32, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), groups=32, bias=False)
             model.features.stage4.unit1.dw_conv.conv = nn.Conv2d(64, 64, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), groups=64, bias=False)
@@ -898,7 +977,7 @@ def get_model(
             pretrained=pretrained, 
             num_classes=output_classes,
         )
-        if data_name=="CIFAR10":
+        if data_name=="cifar10":
             # to make it work with CIFAR10 turn three last stride 2 convs to stride 1 convs
             model.features.stage3.unit1.dw_conv.conv = nn.Conv2d(64, 64, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), groups=64, bias=False)
             model.features.stage4.unit1.dw_conv.conv = nn.Conv2d(128, 128, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), groups=128, bias=False)
@@ -913,7 +992,7 @@ def get_model(
             pretrained=pretrained, 
             num_classes=output_classes,
         )
-        if data_name=="CIFAR10":
+        if data_name=="cifar10":
             # to make it work with CIFAR10 turn three last stride 2 convs to stride 1 convs
             model.features.stage3.unit1.dw_conv.conv = nn.Conv2d(96, 96, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), groups=96, bias=False)
             model.features.stage4.unit1.dw_conv.conv = nn.Conv2d(192, 192, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), groups=192, bias=False)
@@ -960,13 +1039,13 @@ def get_model(
     else: 
         # TODO: try out different pretrainings 
         # TODO check that batchnorm and data normalization works fine.
-        model = timm.create_model(model_name, pretrained=True)
+        model = timm.create_model(model_name, pretrained=pretrained)
         # freezing model params
         # for param in model.parameters():
         #     param.requires_grad = False
         # adding new classifier which is trained
         # NOTE: b0 was 1280, b3 was 1536, b5 was 2048, b7 was 2560
-        model.classifier = nn.Linear(1536, output_classes)
+        model.fc = nn.Linear(2048, output_classes)
 
     # TODO: surgical procedures have to be done automatically depending on model.
     #model = ModelSurgeon(SurgicalProcedures.BN_to_GN).operate(model)

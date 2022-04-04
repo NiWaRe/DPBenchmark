@@ -25,7 +25,13 @@ from pytorch_lightning.core.datamodule import LightningDataModule
 from pytorch_lightning.utilities.types import STEP_OUTPUT
 
 # data
-from data import LitDataModuleDP, CIFAR10DataModule, CIFAR10DataModuleDP, MNISTDataModuleDP
+from data import (
+    LitDataModuleDP, 
+    CIFAR10DataModule, 
+    CIFAR10DataModuleDP, 
+    MNISTDataModuleDP,
+    ImageNetteDataModuleDP,
+)
 
 # model 
 from models import get_model
@@ -37,7 +43,7 @@ from pytorch_lightning.callbacks import LearningRateMonitor
 from pytorch_lightning.loggers import TensorBoardLogger
 from torchmetrics.functional import accuracy
 from pytorch_lightning.callbacks import ModelCheckpoint, model_checkpoint
-from utils import get_grad_norm, initialize_weight
+from utils import get_grad_norm, initialize_weight, normalize_weight
 
 # differential privacy
 from deepee import (PrivacyWrapper, PrivacyWatchdog, UniformDataLoader,
@@ -76,11 +82,14 @@ class LitModelDP(LightningModule):
         dense: bool = False,
         halve_dim: bool = False, 
         after_conv_fc_str: str = "identity", 
+        activation_fc_str: str = "selu",
         skip_depth: int = 2,
         model_surgeon: ModelSurgeon = None,
         data_name: str = "cifar10",
         datamodule_class: Type[LightningDataModule] = None,
         pretrained: bool = False,
+        weight_init: bool = True,
+        weight_norm: bool = False,
         num_classes: int = 10,
         optimizer: str = "sgd",
         opt_kwargs: dict = {"lr":0.05},
@@ -115,12 +124,15 @@ class LitModelDP(LightningModule):
             dense: whether to use dense connections (implies halve_dim=False, skip_depth=0)
             halve_dim: whether in residual stack we also downsample or not
             after_conv_fc_str: what function to use after Conv2d (e.g. batchnorm, pool, identity)
+            activation_fc_str: what activation function to use
             skip_depth: how many ConvBlocks should be jumped by skip connection
             ##
             model_surgeon: passed in deepee.ModelSurgeon to make model compatible with DP [deepee]
             data_name: also pass in what data to train on to possibly adapt model 
                        and to also save data as part of hparams for wandb.
             pretrained: pertrained or not
+            weight_init: initialize weights with xavier uniform or not
+            weight_norm: whether to normalize weights during training or not
             num_classes: number of classes
             optimizer: pass in the optimizer to be used
             opt_kwargs: optional optim params
@@ -140,27 +152,28 @@ class LitModelDP(LightningModule):
        
         # select standard torchvision model
         self.model = get_model(
-            model_name, 
-            pretrained, 
-            num_classes, 
-            data_name, 
-            kernel_size,
-            conv_layers, 
-            nr_stages,
-            depth, 
-            width, 
-            halve_dim, 
-            after_conv_fc_str, 
-            skip_depth,
-            dense,
-            dsc
+            model_name=model_name, 
+            pretrained=pretrained, 
+            num_classes=num_classes, 
+            data_name=data_name, 
+            kernel_size=kernel_size,
+            conv_layers=conv_layers, 
+            nr_stages=nr_stages,
+            depth=depth, 
+            width=width, 
+            halve_dim=halve_dim, 
+            after_conv_fc_str=after_conv_fc_str, 
+            activation_fc_str=activation_fc_str,
+            skip_depth=skip_depth,
+            dense=dense,
+            dsc=dsc,
         )
         
         if dp_tool == "deepee": 
             self.model = model_surgeon.operate(self.model)
-        elif dp_tool == "opacus" and dp == True: 
+        elif dp_tool == "opacus" or dp == False:
             # if no batch_norm modules exist, nothing happens
-            # opacus should also be used for baseline trainings (dp == False)
+            # opacus modification should also be used for baseline trainings (dp == False)
             # TODO: what other than batch_norm modules could exist? 
             self.model = module_modification.convert_batchnorm_modules(
                 model=self.model, 
@@ -170,7 +183,12 @@ class LitModelDP(LightningModule):
         print(self.model)
 
         # add weight init
-        self.model.apply(initialize_weight)
+        if weight_init:
+            self.model.apply(initialize_weight)
+
+        # add weight norm
+        if weight_norm: 
+            self.model.apply(normalize_weight)
 
         # disable auto. backward to be able to add noise and track 
         # the global grad norm (also in the non-dp case, lightning 
@@ -183,10 +201,6 @@ class LitModelDP(LightningModule):
 
     def forward(self, x):
         out = self.model(x)
-        # googlenet outputs objects of the class GoogleNetOutputs 
-        # where the final logits are at position 0 (not if pretrained)
-        if not self.hparams.pretrained and self.hparams.model_name == "googlenet": 
-            out = out[0]
         return out
 
     def training_step(self, batch, batch_idx):
@@ -194,12 +208,18 @@ class LitModelDP(LightningModule):
         criterion = nn.CrossEntropyLoss()
 
         out = self.model(x)
-        # googlenet outputs objects of the class GoogleNetOutputs 
-        # where the final logits are at position 0 (not if pretrained)
-        if not self.hparams.pretrained and self.hparams.model_name == "googlenet": 
-            out = out[0]
 
-        loss = criterion(out, y)
+        # googlenet has two auxiliary classifiers, following the paper we do an weighted sum
+        # is only the case with the non-pretrained model
+        if not self.hparams.pretrained and self.hparams.model_name == "googlenet": 
+            loss1 = criterion(out.logits, y)
+            loss_aux1 = criterion(out.aux_logits1, y)
+            loss_aux2 = criterion(out.aux_logits2, y)
+            loss = loss1 + 0.3*loss_aux1 + 0.3*loss_aux2
+        else: 
+            # normal loss
+            loss = criterion(out, y)
+
         self.log('train_loss', loss)
 
         # also do non-dp backward manually to track global grad
@@ -236,10 +256,15 @@ class LitModelDP(LightningModule):
                 # opt.step() does a real step and opt.virtual_step() only aggregates gradients which are
                 # then aggregated to the next opt.step(). Use self.hparams.n_accumulation_steps
                 if (
-                    self.trainer.global_step % self.hparams.n_accumulation_steps
-                ) != 0 or (
-                    self.trainer.global_step
-                ) == self.hparams.steps_per_epoch:
+                    # no accumulation is happening
+                    self.hparams.n_accumulation_steps <= 1
+                ) or (
+                    # accumulation is happening not in this step
+                    self.trainer.global_step % self.hparams.n_accumulation_steps != 0 
+                ) or (
+                    # last step of training (so no accumulation)
+                    self.trainer.global_step == self.hparams.steps_per_epoch
+                ):
                     opt.step()
                 else:
                     opt.virtual_step()
@@ -320,6 +345,9 @@ class LitModelDP(LightningModule):
         elif self.hparams.data_name=="mnist":
             # val-split = 0.2, 60K training samples
             n_train_samples = 48000
+        elif self.hparams.data_name=="imagenette":
+            # val-split = 0.2, 10K training samples
+            n_train_samples = 8000
         self.hparams.steps_per_epoch = n_train_samples // self.hparams.batch_size
         if self.hparams.lr_scheduler:
             # scheduler_dict = {
@@ -331,12 +359,13 @@ class LitModelDP(LightningModule):
             #     ),
             #     'interval': 'step',
             # }
-            nr_epochs = 10 if self.hparams.dp else 10 # 3 davor
+            # NOTE: think about inlcuding a threshold at 0.005 (stay constant or reduce only every 5)
+            nr_epochs = 5 if self.hparams.dp else 10 #1, 10
             scheduler_dict = {
                 'scheduler': StepLR(
                     optimizer, 
                     step_size=nr_epochs*self.hparams.steps_per_epoch, 
-                    gamma=0.7, 
+                    gamma=0.9, #0.7 
                 ),
                 'interval': 'step',
             }
@@ -580,7 +609,7 @@ cli = LightningCLI_Custom(
     model_class=LitModelDP, 
     # TODO: think about making model selection and data selection more consistent
     # --> try to use LitDataModuleDP as wrapper class
-    datamodule_class=CIFAR10DataModuleDP, 
+    datamodule_class=ImageNetteDataModuleDP, 
     save_config_callback=SaveConfigCallbackWandB,
 )
 

@@ -765,6 +765,10 @@ def get_model(
         in_channels = 1
         img_dim = 28
         output_classes = 10
+    elif data_name=="imagenette":
+        in_channels = 3
+        img_dim = 224
+        output_classes = 10
     # choose model
     if model_name=="simple_conv": 
         model = SimpleConvNet(

@@ -7,8 +7,8 @@ parameters:
   model.L2_clip:
     distribution: uniform
     # priors from Depth ConvNet General Sweep
-    max: 10.0 
-    min: 0.01
+    max: 4.0 #20
+    min: 0.5 #0.01
   # model.noise_multiplier:
   #   distribution: uniform
   #   # typical range according to opacus: https://opacus.ai/docs/faq: [2.0, 0.1] 
@@ -19,16 +19,26 @@ parameters:
   #   distribution: int_uniform
   #   max: 7
   #   min: 1
-  # model.batch_size:
-  #   distribution: int_uniform
-  #   max: 64
-  #   min: 8
+  # model.virtual_batch_size:
+    # distribution: int_uniform
+    # max: 128
+    # min: 16
+    # distribution: categorical
+    # values: 
+    # - 16
+    # - 32
+    # - 64
+    # - 128
   # NOTE: more options could be added for final searches
   trainer.max_epochs:
     distribution: categorical
     values: 
-    - 15
-    - 30
+    #- 15
+    #- 30
+    - 60
+    - 90
+    - 120
+    #- 180
   # model.target_delta:
   #   distribution: uniform
   #   max: 2e-05

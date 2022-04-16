@@ -14,7 +14,7 @@ trainer:
     - class_path: pytorch_lightning.callbacks.EarlyStopping
       init_args:
         monitor: 'val_loss'
-        patience: 15
+        patience: 60 #30
         mode: 'min'
         divergence_threshold: 1000.0 
       # NOTE: comment this out if lr_scheduler is set to False    
@@ -89,9 +89,9 @@ model:
     # simple_conv, stage_conv, en_scaling_base_model, en_scaling_residual_model, 
     # googlenet, xception, efficientnet_b[0-7]
     # any other model is tried to be created from the timm library
-  model_name: 'mobilenetv1_w050'
+  model_name: 'en_scaling_residual_model'
   pretrained: False
-  weight_init: False # xavier_uniform (init for selu at the moment!)
+  weight_init: True # xavier_uniform (init for selu at the moment!)
   weight_norm: False
   # for SimpleConvNet and DepthConvNet
   kernel_size: 3
@@ -103,22 +103,22 @@ model:
   # possible choices: see utils.py
     # norms: batch_norm, group_norm, instance_norm, layer_norm
     # pooling: max_pool, avg_pool
-    # combination: mxp_gn
+    # combination: mxp_gn, mxp_ln
     # nothing: identity
   after_conv_fc_str: 'mxp_gn'
   # possible choices: see utils.py
   # selu, relu, leaky_relu
-  activation_fc_str: 'relu'
+  activation_fc_str: 'selu'
   skip_depth: 2
   # for en_scaling_*
-  depth: 8.0
-  width: 1.0
+  depth: 1.0
+  width: 8.0
   dsc: False
   # for dense components
   # skip_depth and halve_dim will be ignored
   # width ~ growing factor
   # depth = num of Conv-AfterConvFc-Activation triples per DenseBlock
-  dense: False
+  dense: True
   # NOTE: this is only relevant for the deepee DP tool
   # possible surgeries: see surgery.py
   # NOTE: comment out if not needed
@@ -126,25 +126,25 @@ model:
   #   class_path: deepee.ModelSurgeon
   #   init_args:
   #     converter: utils.BN_to_GN
-  data_name: 'cifar10'
+  data_name: 'imagenette'
   # possible optims: sgd, adam
   optimizer: 'sgd'
   # NOTE: already set in sweep config
   opt_kwargs: 
-    lr: 0.1 #0.002
+    lr: 0.002 #0.1
   # optional
-    #momentum: 0.9
-    #weight_decay: 0.0002
+    momentum: 0.9
+    weight_decay: 0.0002
   # the learning rate that was used for the sweep.
   lr_scheduler: true
-  batch_size: 128 #64 #128 #16
-  virtual_batch_size: 128 #256 #32 # not using at the moment
+  batch_size: 16 #128 #16
+  virtual_batch_size: 16 #128 #32 # not using at the moment
   dp_tool: "opacus"
   dp: true
   # NOTE: already set in sweep config
   # L2_clip: 1.677 
   # noise_multiplier: 0.5216 
-  target_epsilon: 10.0
+  target_epsilon: 7.0
   abort: true
   target_delta: 1e-5
   fallback_to_rdp: false

@@ -170,19 +170,34 @@ def getAfterConvFc(
             stride=1, 
             padding=1
         )
-    elif after_conv_fc_str == 'gn_mxp': 
+    elif after_conv_fc_str == 'mxp_gn': 
         # keep dimensions for CIFAR10 dimenions assuming a downsampling 
         # only through halving. 
         after_conv_fc = nn.Sequential(
+            nn.MaxPool2d(
+                kernel_size=3, 
+                stride=1, 
+                padding=1
+            ),
             nn.GroupNorm(
                 num_groups=min(8, num_features), 
                 num_channels=num_features, 
                 affine=True
             ),
+        )
+    elif after_conv_fc_str == 'mxp_ln': 
+        # keep dimensions for CIFAR10 dimenions assuming a downsampling 
+        # only through halving. 
+        after_conv_fc = nn.Sequential(
             nn.MaxPool2d(
                 kernel_size=3, 
                 stride=1, 
                 padding=1
+            ),
+            nn.GroupNorm(
+                num_groups=1, 
+                num_channels=num_features, 
+                affine=True
             ),
         )
     elif after_conv_fc_str == 'identity': 
@@ -192,7 +207,7 @@ def getAfterConvFc(
 
 def initialize_weight(module):
     if isinstance(module, (nn.Linear, nn.Conv2d)):
-        nn.init.xavier_uniform_(module.weight, gain=nn.init.calculate_gain("relu"))
+        nn.init.xavier_uniform_(module.weight, gain=nn.init.calculate_gain("selu"))
         # nn.init.kaiming_normal_(module.weight, nonlinearity='leaky_relu')
     # elif isinstance(module, nn.GroupNorm):
     #     nn.init.xavier_uniform_(module.weight, 1)

@@ -263,6 +263,7 @@ class LitModelDP(LightningModule):
                     self.trainer.global_step % self.hparams.n_accumulation_steps != 0 
                 ) or (
                     # last step of training (so no accumulation)
+                    # TODO: self.hparams.steps_per_epoch * self.hparams.max_epochs
                     self.trainer.global_step == self.hparams.steps_per_epoch
                 ):
                     opt.step()
@@ -346,6 +347,7 @@ class LitModelDP(LightningModule):
             # val-split = 0.2, 60K training samples
             n_train_samples = 48000
         elif self.hparams.data_name=="imagenette":
+            # TODO: this is an approximation
             # val-split = 0.2, 10K training samples
             n_train_samples = 8000
         self.hparams.steps_per_epoch = n_train_samples // self.hparams.batch_size
@@ -365,7 +367,7 @@ class LitModelDP(LightningModule):
                 'scheduler': StepLR(
                     optimizer, 
                     step_size=nr_epochs*self.hparams.steps_per_epoch, 
-                    gamma=0.9, #0.7 
+                    gamma=0.9 if self.hparams.dp else 0.7, #0.9 for DP, 0.7 for no-DP 
                 ),
                 'interval': 'step',
             }

@@ -9,51 +9,70 @@ parameters:
     distribution: uniform
     # priors from Depth ConvNet General Sweep
     # increase upper bound --> in current searches most models are all nearly 10.
-    max: 15.0 
+    max: 20.0 
     min: 0.01
-  # trainer.max_epochs:
+  trainer.max_epochs:
+    distribution: categorical
+    values: 
+      - 60
+      - 90
+      - 120
+  # model.batch_size:
   #   distribution: categorical
   #   values: 
-  #     - 15
-  #     - 30
+  #     - 128
+  #     - 64
+  #     - 32
+  #     - 16
+  #     - 8
   # ConvNet params for 'en_scaling_residual_model'
   # halve_dim: True
-  # model.after_conv_fc_str: 
-  #   distribution: categorical
-  #   values: 
-  #     - 'max_pool_gn'
-  #     - 'max_pool'
-  #     - 'group_norm'
-  #     - 'instance_norm'
-    #- 'batch_norm_dp'
+  model.after_conv_fc_str: 
+    distribution: categorical
+    values: 
+      - 'max_pool_gn'
+      - 'mxp_ln'
+      - 'max_pool'
+      - 'group_norm'
+      - 'instance_norm'
+      - 'layer_norm'
+    # - 'batch_norm_dp'
   # model.skip_depth: 
   #   distribution: int_uniform
   #   # range based on ResNet paper (using 2)
   #   max: 4
   #   min: 0
-  model.depth: 
-    distribution: categorical
+  # model.depth: 
+  #   distribution: categorical
     # range from EfficientNet paper (1.0 - 8.0)
-    values: 
-      - 1.0
-      - 2.0
-      - 4.0
-      - 8.0
-      - 16.0
-      - 32.0
-  model.width: 
+    # values: 
+    #   - 1.0
+    #   - 2.0
+    #   - 3.0
+    #   - 4.0
+    #   - 5.0
+    #   - 6.0
+    #   - 7.0
+    #   - 8.0
+    #   - 9.0
+    #   - 10.0
+  # model.width: 
     # restrict to integers (not floats) in this search 
     # so that number of channels stays divisble by num groups
     # when using group norm. (no int_uniform to not change types in trainer.py)
     # range from EfficientNet paper (1.0 - 5.0)
-    distribution: categorical
-    values: 
-      - 1.0
-      - 2.0
-      - 4.0
-      - 8.0
-      - 16.0
-      - 32.0
+    # distribution: categorical
+    # values: 
+    #   - 1.0
+    #   - 2.0
+    #   - 3.0
+    #   - 4.0
+    #   - 5.0
+    #   - 6.0
+    #   - 7.0
+    #   - 8.0
+    #   - 9.0
+    #   - 10.0
 program: trainer.py
 command:
   - ${env}

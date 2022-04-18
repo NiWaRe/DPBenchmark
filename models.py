@@ -30,8 +30,8 @@ from deepee import (PrivacyWrapper, PrivacyWatchdog, UniformDataLoader,
 from utils import Lambda, getAfterConvFc, getActivationFunction
 
 # additional models
-sys.path.append(os.path.join(os.path.dirname(__file__), 'local_models/CondenseNet'))
-from local_models.CondenseNet.models import condensenet # models/CondenseNet/models/condensenet.py
+#sys.path.append(os.path.join(os.path.dirname(__file__), 'local_models/CondenseNet'))
+#from local_models.CondenseNet.models import condensenet # models/CondenseNet/models/condensenet.py
 
 class SimpleConvNet(nn.Module):
     """

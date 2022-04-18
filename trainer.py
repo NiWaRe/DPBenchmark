@@ -446,6 +446,8 @@ class LightningCLI_Custom(LightningCLI):
 
                 # NOTE: For multiple GPU support: see PL code. 
                 # For now we only consider shifting to cuda, if there's at least one GPU ('gpus' > 0)
+                if self.trainer.gpus:
+                    self.model.model.to("cuda:0")
                 self.model.privacy_engine = PrivacyEngine(
                     self.model.model,
                     sample_rate=sample_rate * self.model.hparams.n_accumulation_steps,

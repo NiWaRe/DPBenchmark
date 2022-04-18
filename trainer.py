@@ -74,6 +74,11 @@ from captum.attr import (
 import matplotlib
 import matplotlib.pyplot as plt
 
+# 1. Implement normal trainer.py without PL
+# 2. With ImageNette
+# 3. With Opacus
+# 4. With Wandb Swep
+
 ### MODEL ###
 class LitModelDP(LightningModule):
     def __init__(

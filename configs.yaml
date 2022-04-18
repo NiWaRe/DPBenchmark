@@ -109,7 +109,7 @@ model:
     # simple_conv, stage_conv, en_scaling_base_model, en_scaling_residual_model, 
     # googlenet, xception, efficientnet_b[0-7]
     # any other model is tried to be created from the timm library
-  model_name: 'densenet121'
+  model_name: 'resnet18'
   pretrained: False
   weight_init: False # xavier_uniform (init for selu at the moment!)
   weight_norm: False
@@ -150,7 +150,7 @@ model:
     #weight_decay: 0.0002
   lr_scheduler: true
   batch_size: 32
-  virtual_batch_size: 64 # not using at the moment
+  virtual_batch_size: 32 # not using at the moment
   # DP params
   # under model because I didn't want to overwrite the trainer class 
   # to include these arguments. I can access the params via the model 
@@ -164,7 +164,7 @@ model:
   #   init_args:
   #     converter: utils.BN_to_GN
   # TODO: with dp_tool this is probably not necessary anymore
-  dp: false
+  dp: true
   # NOTE: std of 0.1 yields good performance, >=0.2 not so good. vgg11 cifar10
   L2_clip: 9.972 # ~ 50% of stationary value (assuming convergence in baseline training)
   #noise_multiplier: 0.4272 # resnet: 0.5216, small_deep_conv: 0.438

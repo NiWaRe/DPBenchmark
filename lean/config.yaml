@@ -1,0 +1,78 @@
+###########
+# General #
+###########
+including_test: true
+max_epochs: 30
+device: 'cuda'
+
+#########
+# Model #
+#########
+# possible models: see model.py
+  # resnet18, vgg11(_bn), inception_v4, densenet121, densenet201, wide_resnet50_2,
+  # condense_net_v1, mobilenetv1_w1, mobilenetv1_w025, mobilenetv1_w050, mobilenetv1_w075
+  # mobilenetv3_large_100, mobilenet_v3_small, vit_base_patch16_224,
+  # simple_conv, stage_conv, en_scaling_base_model, en_scaling_residual_model, 
+  # googlenet, xception, efficientnet_b[0-7]
+  # any other model is tried to be created from the timm library
+model_name: 'resnet18'
+pretrained: False
+weight_init: False # xavier_uniform (init for selu at the moment!)
+weight_norm: False
+# for SimpleConvNet and DepthConvNet
+kernel_size: 3
+conv_layers: [16, 32]
+# for stage_conv
+nr_stages: 1
+# for en_scaling_residual_model
+halve_dim: True
+# possible choices: see utils.py
+  # norms: batch_norm, group_norm, instance_norm, layer_norm
+  # pooling: max_pool, avg_pool
+  # combination: mxp_gn, mxp_ln
+  # nothing: identity
+after_conv_fc_str: 'mxp_gn'
+# possible choices: see utils.py
+# selu, relu, leaky_relu
+activation_fc_str: 'selu'
+skip_depth: 2
+# for en_scaling_*
+depth: 1.0
+width: 8.0
+# depthwise seperable convolutions
+dsc: False
+# for dense components
+# skip_depth and halve_dim will be ignored
+# width ~ growing factor
+# depth = num of Conv-AfterConvFc-Activation triples per DenseBlock
+dense: False
+
+######## 
+# Data #
+######## 
+data_name: 'imagenette'
+batch_size: 32
+virtual_batch_size: 32 
+num_classes: 10
+
+############# 
+# Optimizer #
+############# 
+# possible optims: sgd, adam
+optimizer: 'sgd'
+lr: 0.05
+momentum: 0.9
+weight_decay: 0.0002
+lr_scheduler: true
+
+#############
+# DP params #
+#############
+dp_tool: "opacus"
+dp: true
+L2_clip: 9.972 
+#noise_multiplier: 0.4272 
+target_epsilon: 10.0
+abort: true
+target_delta: 1e-5
+fallback_to_rdp: false

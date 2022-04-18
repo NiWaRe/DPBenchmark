@@ -22,7 +22,7 @@ from pl_bolts.datamodules import (
 from deepee import (PrivacyWrapper, PrivacyWatchdog, UniformDataLoader,
                      ModelSurgeon, SurgicalProcedures)
 
-from opacus.utils.uniform_sampler import UniformWithReplacementSampler
+from opacus.data_loader import DPDataLoader
 
 ### Standard Lightning Bolt Data Modules ###
 # TODO: The PrivacyWrapper also supports normal DataLoaders -- don't the DataModules have that type?
@@ -99,22 +99,19 @@ class LitDataModuleDP(MNISTDataModule, FashionMNISTDataModule, CIFAR10DataModule
     #       I could simply overload VisionDataModule._data_loader
     def train_dataloader(self, *args: Any, **kwargs: Any) -> Union[DataLoader, UniformDataLoader]:
         if self.dp:
-            return UniformDataLoader(self.dataset_train, batch_size=self.batch_size, num_workers=self.num_workers)
+            return DPDataLoader.from_data_loader(
+                DataLoader(self.dataset_train, batch_size=self.batch_size, num_workers=self.num_workers), 
+                distributed=False,
+            )
         else: 
             # standard from class VisionDataModule
             return self._data_loader(self.dataset_train, shuffle=self.shuffle)
     def val_dataloader(self, *args: Any, **kwargs: Any) -> Union[DataLoader, List[DataLoader], UniformDataLoader]:
-        if self.dp:
-            return UniformDataLoader(self.dataset_val, batch_size=self.batch_size, num_workers=self.num_workers)
-        else: 
-            # standard from class VisionDataModule
-            return self._data_loader(self.dataset_val)
+        # standard from class VisionDataModule
+        return self._data_loader(self.dataset_val)
     def test_dataloader(self, *args: Any, **kwargs: Any) -> Union[DataLoader, List[DataLoader], UniformDataLoader]:
-        if self.dp:
-            return UniformDataLoader(self.dataset_test, batch_size=self.batch_size, num_workers=self.num_workers)
-        else: 
-            # standard from class VisionDataModule
-            return self._data_loader(self.dataset_test)
+        # standard from class VisionDataModule
+        return self._data_loader(self.dataset_test)
 
 class CIFAR10DataModuleDP(CIFAR10DataModule):
     """
@@ -174,13 +171,12 @@ class CIFAR10DataModuleDP(CIFAR10DataModule):
     def train_dataloader(self) -> Union[UniformDataLoader, DataLoader]:
         dataloader = None
         if self.dp_tool == "opacus":
-            dataloader = DataLoader(
-                self.dataset_train, 
-                num_workers=self.num_workers,
-                batch_sampler=UniformWithReplacementSampler(
-                    num_samples=len(self.dataset_train), 
-                    sample_rate=self.batch_size/len(self.dataset_train)
-                ),
+            dataloader = DPDataLoader.from_data_loader(
+                DataLoader(
+                    self.dataset_train, 
+                    num_workers=self.num_workers,
+                    batch_size=self.batch_size,
+                )
             )
         elif self.dp_tool == "deepee":
             dataloader = UniformDataLoader(
@@ -191,30 +187,6 @@ class CIFAR10DataModuleDP(CIFAR10DataModule):
         else: 
             print("Please select either opacus or deepee as DP tool")
         return dataloader
-
-    def val_dataloader(self) -> Union[UniformDataLoader, DataLoader]:
-        dataloader = None
-        if self.dp_tool == "opacus":
-            dataloader = DataLoader(
-                self.dataset_val, 
-                num_workers=self.num_workers,
-                batch_sampler=UniformWithReplacementSampler(
-                    num_samples=len(self.dataset_val), 
-                    sample_rate=self.batch_size/len(self.dataset_val)
-                ),
-            )
-        elif self.dp_tool == "deepee":
-            dataloader = UniformDataLoader(
-                self.dataset_val, 
-                batch_size=self.batch_size, 
-                num_workers=self.num_workers
-            )
-        else: 
-            print("Please select either opacus or deepee as DP tool")
-        return dataloader
-
-    # TODO: test loader should stay the same, right?
-    #def test_dataloader(self) -> Union[UniformDataLoader, DataLoader]:
 
 
 class MNISTDataModuleDP(MNISTDataModule):
@@ -275,13 +247,12 @@ class MNISTDataModuleDP(MNISTDataModule):
     def train_dataloader(self) -> Union[UniformDataLoader, DataLoader]:
         dataloader = None
         if self.dp_tool == "opacus":
-            dataloader = DataLoader(
-                self.dataset_train, 
-                num_workers=self.num_workers,
-                batch_sampler=UniformWithReplacementSampler(
-                    num_samples=len(self.dataset_train), 
-                    sample_rate=self.batch_size/len(self.dataset_train)
-                ),
+            dataloader = DPDataLoader.from_data_loader(
+                DataLoader(
+                    self.dataset_train, 
+                    num_workers=self.num_workers,
+                    batch_size=self.batch_size,
+                )
             )
         elif self.dp_tool == "deepee":
             dataloader = UniformDataLoader(
@@ -292,30 +263,6 @@ class MNISTDataModuleDP(MNISTDataModule):
         else: 
             print("Please select either opacus or deepee as DP tool")
         return dataloader
-
-    def val_dataloader(self) -> Union[UniformDataLoader, DataLoader]:
-        dataloader = None
-        if self.dp_tool == "opacus":
-            dataloader = DataLoader(
-                self.dataset_val, 
-                num_workers=self.num_workers,
-                batch_sampler=UniformWithReplacementSampler(
-                    num_samples=len(self.dataset_val), 
-                    sample_rate=self.batch_size/len(self.dataset_val)
-                ),
-            )
-        elif self.dp_tool == "deepee":
-            dataloader = UniformDataLoader(
-                self.dataset_val, 
-                batch_size=self.batch_size, 
-                num_workers=self.num_workers
-            )
-        else: 
-            print("Please select either opacus or deepee as DP tool")
-        return dataloader
-
-    # TODO: test loader should stay the same, right?
-    #def test_dataloader(self) -> Union[UniformDataLoader, DataLoader]:
 
 
 ### Custom DataModules ###
@@ -484,38 +431,16 @@ class ImageNetteDataModuleDP(VisionDataModule):
     def train_dataloader(self) -> Union[UniformDataLoader, DataLoader]:
         dataloader = None
         if self.dp_tool == "opacus":
-            dataloader = DataLoader(
-                self.dataset_train, 
-                num_workers=self.num_workers,
-                batch_sampler=UniformWithReplacementSampler(
-                    num_samples=len(self.dataset_train), 
-                    sample_rate=self.batch_size/len(self.dataset_train)
-                ),
+            dataloader = DPDataLoader.from_data_loader(
+                DataLoader(
+                    self.dataset_train, 
+                    num_workers=self.num_workers,
+                    batch_size=self.batch_size,
+                )
             )
         elif self.dp_tool == "deepee":
             dataloader = UniformDataLoader(
                 self.dataset_train, 
-                batch_size=self.batch_size, 
-                num_workers=self.num_workers
-            )
-        else: 
-            print("Please select either opacus or deepee as DP tool")
-        return dataloader
-
-    def val_dataloader(self) -> Union[UniformDataLoader, DataLoader]:
-        dataloader = None
-        if self.dp_tool == "opacus":
-            dataloader = DataLoader(
-                self.dataset_val, 
-                num_workers=self.num_workers,
-                batch_sampler=UniformWithReplacementSampler(
-                    num_samples=len(self.dataset_val), 
-                    sample_rate=self.batch_size/len(self.dataset_val)
-                ),
-            )
-        elif self.dp_tool == "deepee":
-            dataloader = UniformDataLoader(
-                self.dataset_val, 
                 batch_size=self.batch_size, 
                 num_workers=self.num_workers
             )

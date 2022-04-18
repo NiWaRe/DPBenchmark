@@ -5,6 +5,9 @@ import yaml
 from argparse import Namespace
 from typing import Callable, ClassVar, Union, Any, Dict, Type, List
 import numpy as np
+from functools import partial
+from types import MethodType
+
 
 # general ml
 import torch
@@ -32,6 +35,7 @@ from data import (
     MNISTDataModuleDP,
     ImageNetteDataModuleDP,
 )
+from torch.utils.data import DataLoader, Dataset
 
 # model 
 from models import get_model
@@ -49,9 +53,11 @@ from utils import get_grad_norm, initialize_weight, normalize_weight
 from deepee import (PrivacyWrapper, PrivacyWatchdog, UniformDataLoader,
                      ModelSurgeon, SurgicalProcedures, watchdog)
 
-from opacus import PrivacyEngine, privacy_engine
-from opacus.dp_model_inspector import DPModelInspector
-from opacus.utils import module_modification
+from opacus import PrivacyEngine
+from opacus.data_loader import DPDataLoader
+from opacus.lightning import DPLightningDataModule
+from opacus.validators import ModuleValidator
+from opacus.utils import batch_memory_manager
 
 # interpretability 
 from captum.attr import (
@@ -174,11 +180,12 @@ class LitModelDP(LightningModule):
         elif dp_tool == "opacus" or dp == False:
             # if no batch_norm modules exist, nothing happens
             # opacus modification should also be used for baseline trainings (dp == False)
-            # TODO: what other than batch_norm modules could exist? 
-            self.model = module_modification.convert_batchnorm_modules(
-                model=self.model, 
-                converter=module_modification._batchnorm_to_groupnorm,
-            )
+            
+            # NOTE: check opacus/validators to see what checks and fixes have been introduced.
+            # BatchNorm is replaced by GroupNorm[8] by default - check batch_norm.py to change.
+            # ~/anaconda3/envs/dp_mt/lib/python3.8/site-packages/opacus/validators/batch_norm.py
+            if not ModuleValidator.is_valid(self.model):
+                self.model = ModuleValidator.fix(self.model)
 
         print(self.model)
 
@@ -197,7 +204,7 @@ class LitModelDP(LightningModule):
 
         # Opacus: init attribute 'privacy_engine'
         if dp and dp_tool == "opacus": 
-            self.privacy_engine = None
+            self.privacy_engine = PrivacyEngine()
 
     def forward(self, x):
         out = self.model(x)
@@ -222,72 +229,42 @@ class LitModelDP(LightningModule):
 
         self.log('train_loss', loss)
 
-        # also do non-dp backward manually to track global grad
-        if not self.hparams.dp:
-            opt = self.optimizers()
-            opt.zero_grad()
-
-            self.manual_backward(loss)
-            # log global grad norm 
-            self.log('global grad norm', get_grad_norm(
-                    self.model.wrapped_model
-                    if self.hparams.dp and self.hparams.dp_tool=='deepee'
-                    else self.model, 
-                )
+        # optimize (same with and without DP)
+        opt = self.optimizers()
+        # reset gradients
+        opt.zero_grad()
+        # backward pass
+        self.manual_backward(loss)
+        # log global grad norm 
+        self.log('global grad norm', get_grad_norm(
+                self.model.wrapped_model
+                if self.hparams.dp and self.hparams.dp_tool=='deepee'
+                else self.model, 
             )
+        )
+        # normal optim step except if DP with deepee is used
+        if self.hparams.dp and self.hparams.dp_tool == "deepee":
+            self.model.clip_and_accumulate()
+            self.model.noise_gradient()
             opt.step()
-        else:
-            opt = self.optimizers()
-            opt.zero_grad()
-            # manual_backward automatically applies scaling, etc.
-            self.manual_backward(loss)
-            # log global grad norm 
-            self.log('global grad norm', get_grad_norm(
-                    self.model.wrapped_model
-                    if self.hparams.dp and self.hparams.dp_tool=='deepee'
-                    else self.model, 
-                )
-            )
+            self.model.prepare_next_batch()
+            # self.model.current_epsilon is a property of the class
+            self.log('spent_epsilon', self.model.current_epsilon)
+        else: 
+            opt.step()
 
-            if self.hparams.dp_tool == "opacus":
-                # NOTE: virtual steps can be taken to do calculations with less memory consumption. 
-                # Hence allowing a bigger batch_size. To do twice as big batch_sizes with only a marginal 
-                # more memory consuption do an opt.step() and an opt.virtual_step() alternating. 
-                # opt.step() does a real step and opt.virtual_step() only aggregates gradients which are
-                # then aggregated to the next opt.step(). Use self.hparams.n_accumulation_steps
-                if (
-                    # no accumulation is happening
-                    self.hparams.n_accumulation_steps <= 1
-                ) or (
-                    # accumulation is happening not in this step
-                    self.trainer.global_step % self.hparams.n_accumulation_steps != 0 
-                ) or (
-                    # last step of training (so no accumulation)
-                    # TODO: self.hparams.steps_per_epoch * self.hparams.max_epochs
-                    self.trainer.global_step == self.hparams.steps_per_epoch
-                ):
-                    opt.step()
-                else:
-                    opt.virtual_step()
-                # TODO: do smt with best_alpha
-                spent_epsilon, best_alpha = opt.privacy_engine.get_privacy_spent(
-                    self.hparams.target_delta,
-                )
-                self.log('spent_epsilon', spent_epsilon)
-                # stop if epsilon too big 
-                if spent_epsilon > self.hparams.target_epsilon: 
-                    # tell trainer to stop -- copied from built-in EarlyStopping Callback (see docs)
-                    # stop every ddp process if any world process decides to stop 
-                    should_stop = self.trainer.training_type_plugin.reduce_boolean_decision(True)
-                    self.trainer.should_stop = self.trainer.should_stop or should_stop
+        # logging in case DP with opacus is used
+        if self.hparams.dp and self.hparams.dp_tool == "opacus":
+            spent_epsilon = self.privacy_engine.get_epsilon(self.hparams.target_delta)
+            self.log('spent_epsilon', spent_epsilon)
 
-            elif self.hparams.dp_tool == "deepee":
-                self.model.clip_and_accumulate()
-                self.model.noise_gradient()
-                opt.step()
-                self.model.prepare_next_batch()
-                # self.model.current_epsilon is a property of the class
-                self.log('spent_epsilon', self.model.current_epsilon)
+            # MIGRATION TODO: check if this is still necessary
+            # stop if epsilon too big 
+            if spent_epsilon > self.hparams.target_epsilon: 
+                # tell trainer to stop -- copied from built-in EarlyStopping Callback (see docs)
+                # stop every ddp process if any world process decides to stop 
+                should_stop = self.trainer.training_type_plugin.reduce_boolean_decision(True)
+                self.trainer.should_stop = self.trainer.should_stop or should_stop
 
         # learning rate scheduler if configured so
         if self.hparams.lr_scheduler:
@@ -333,8 +310,48 @@ class LitModelDP(LightningModule):
                 **self.hparams.opt_kwargs,
             )
 
-        if self.hparams.dp_tool=='opacus' and self.hparams.dp:
-            self.privacy_engine.attach(optimizer)
+        # change if DP with opacus is used
+        if self.hparams.dp: 
+            data_loader = (
+                # soon there will be a fancy way to access train dataloader,
+                # see https://github.com/PyTorchLightning/pytorch-lightning/issues/10430
+                #self.trainer.data_connector._train_dataloader_source.dataloader()
+                self.trainer.datamodule.train_dataloader()
+            )
+            # transform (model, optimizer, dataloader) to DP-versions
+            if hasattr(self, "dp"):
+                self.dp["model"].remove_hooks()
+            dp_model, optimizer, data_loader = self.privacy_engine.make_private_with_epsilon(
+                module=self.model,
+                optimizer=optimizer,
+                data_loader=data_loader,
+                epochs=self.trainer.max_epochs,
+                target_epsilon=self.hparams.target_epsilon,
+                target_delta=self.hparams.target_delta,
+                max_grad_norm=self.hparams.L2_clip,
+            )
+            
+            # MIGRATION TODO: wrap the train_dataloader - however, very hacky because 
+            # a) BMM not as context manager (as done in tutorial) and b) hacky data-loader access
+            train_dataloader = partial(
+                train_dataloader_raw, 
+                optimizer=optimizer, 
+                max_batch_size=self.hparams.virtual_batch_size,
+                dataloader=data_loader,
+            )
+            self.trainer.datamodule.train_dataloader = MethodType(
+                train_dataloader, 
+                self.trainer.datamodule,
+            )
+
+            # MIGRATION TODO: check if the updated hparams are also saved to wandb 
+            # calculate the resulting noise multiplier and safe in configuration
+            self.hparams.noise_multiplier = optimizer.noise_multiplier
+            print(f"Noise Multiplier: {optimizer.noise_multiplier}")
+
+            # save new model
+            self.model = dp_model
+            self.dp = {"model": dp_model}
 
         optims.update({'optimizer': optimizer})
 
@@ -352,15 +369,6 @@ class LitModelDP(LightningModule):
             n_train_samples = 8000
         self.hparams.steps_per_epoch = n_train_samples // self.hparams.batch_size
         if self.hparams.lr_scheduler:
-            # scheduler_dict = {
-            #     'scheduler': OneCycleLR(
-            #         optimizer, 
-            #         max_lr=0.1, 
-            #         epochs=self.trainer.max_epochs, 
-            #         steps_per_epoch=steps_per_epoch
-            #     ),
-            #     'interval': 'step',
-            # }
             # NOTE: think about inlcuding a threshold at 0.005 (stay constant or reduce only every 5)
             nr_epochs = 5 if self.hparams.dp else 10 #1, 10
             scheduler_dict = {
@@ -371,13 +379,6 @@ class LitModelDP(LightningModule):
                 ),
                 'interval': 'step',
             }
-            # scheduler_dict = {
-            #     'scheduler': ExponentialLR(
-            #         optimizer, 
-            #         gamma=0.7, 
-            #     ),
-            #     'interval': 'step',
-            # }
             optims.update({'lr_scheduler': scheduler_dict})
 
         return optims
@@ -419,7 +420,6 @@ class LightningCLI_Custom(LightningCLI):
                     target_delta=self.model.hparams.target_delta,
                     fallback_to_rdp=self.model.hparams.fallback_to_rdp,
                 )
-
                 # We call self.model.model because our LitModel defines the model itself as 
                 # an attr self.model. This way we can wrap the actual model in the PrivacyWraper 
                 # without loosing compatibility with the trainer.fit() 
@@ -431,40 +431,12 @@ class LightningCLI_Custom(LightningCLI):
                     noise_multiplier=self.model.hparams.noise_multiplier, 
                     watchdog=watchdog,
                 )
-            elif self.model.hparams.dp_tool == "opacus":
-                # NOTE: for now the adding to the optimizers is in model.configure_optimizers()
-                # because at this point model.configure_optimizers() wasn't called yet. 
-                # That's also why we save n_accumulation_steps as a model parameter.
-                sample_rate = self.datamodule.batch_size/len(self.datamodule.dataset_train)
-                if self.model.hparams.virtual_batch_size >= self.model.hparams.batch_size: 
-                    self.model.hparams.n_accumulation_steps = int(
-                        self.model.hparams.virtual_batch_size/self.model.hparams.batch_size
-                    )
-                else: 
-                    self.model.hparams.n_accumulation_steps = 1 # neutral
-                    print("Virtual batch size has to be bigger than real batch size!")
 
-                # NOTE: For multiple GPU support: see PL code. 
-                # For now we only consider shifting to cuda, if there's at least one GPU ('gpus' > 0)
+            elif self.model.hparams.dp_tool == "opacus":
+                # MIGRATION TODO: is necessary with new version?
                 if self.trainer.gpus:
                     self.model.model.to("cuda:0")
-                self.model.privacy_engine = PrivacyEngine(
-                    self.model.model,
-                    sample_rate=sample_rate * self.model.hparams.n_accumulation_steps,
-                    target_delta = self.model.hparams.target_delta,
-                    target_epsilon=self.model.hparams.target_epsilon,
-                    # NOTE: either 'epochs' and 'target_epsilon' or 'noise_multiplier' can be specified.
-                    # If noise_multiplier is not specified, (target_epsilon, target_delta, epochs) 
-                    # is used to calculate it.
-                    epochs=self.trainer.max_epochs,
-                    #noise_multiplier=self.model.hparams.noise_multiplier,
-                    max_grad_norm=self.model.hparams.L2_clip,
-                ).to("cuda:0" if self.trainer.gpus else "cpu")
-                # necessary if noise_multiplier is dynamically calculated by opacus
-                # in order to ensure that the param is tracked
-                self.model.hparams.noise_multiplier = self.model.privacy_engine.noise_multiplier
-                print(f"Noise Multiplier: {self.model.privacy_engine.noise_multiplier}")
-
+                
             else: 
                 print("Use either 'opacus' or 'deepee' as DP tool.")
 
@@ -608,6 +580,21 @@ def visualize_importances(
         plt.xticks(x_pos, feature_names, wrap=True)
         plt.xlabel(axis_title)
         plt.title(title)
+
+# wrapper function for train_dataloader in the case of DP
+def train_dataloader_raw(self, optimizer, max_batch_size, dataloader):
+        """ The train dataloader """
+        return batch_memory_manager.wrap_data_loader(  
+            data_loader = DPDataLoader.from_data_loader(
+                dataloader
+            ),
+            max_batch_size = max_batch_size,
+            optimizer = optimizer,
+        )
+
+#########
+# START #
+#########
 
 cli = LightningCLI_Custom(
     model_class=LitModelDP, 

@@ -5,3 +5,10 @@ Three important files:
 * `trainer.py` - lightningCLI with overloaded training functions and implemented hooks, and the main lightning module wrapper class to work with deepee DP.
 * `data.py` - lightning datamodules adapted to work with DP.
 * `models.py` - raw models. 
+
+# Installation 
+1. Create conda env with `conda env create -f setup/environment-yaml`
+2. Download necessary data sources 
+3. Login to weights and biases
+    * Login to wandb: `wandb login`
+    * Start/Stop sync: `wandb online`/`wandb offline`

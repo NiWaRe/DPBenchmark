@@ -207,7 +207,7 @@ def main(project_name, experiment_name, config):
         model.apply(normalize_weight)
 
     # shift to CUDA
-    if config.device == 'cuda:0' and torch.cuda.device_count() > 1:
+    if config.device == 'cuda:0' and config.use_all_gpus and torch.cuda.device_count() > 1:
         print("Using multiple GPUs: ", torch.cuda.device_count(), "GPUs!")
         # dim = 0 [30, xxx] -> [10, ...], [10, ...], [10, ...] on 3 GPUs
         model = nn.DataParallel(model)

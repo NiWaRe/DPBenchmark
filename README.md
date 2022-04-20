@@ -9,6 +9,7 @@ Three important files:
 # Installation 
 1. Create conda env with `conda env create -f setup/environment-yaml`
 2. Download necessary data sources 
+    * Or create symlink to shared data-folder with `ln -s /path/to/shared/data data`
 3. Login to weights and biases
     * Login to wandb: `wandb login`
     * Start/Stop sync: `wandb online`/`wandb offline`

@@ -152,6 +152,7 @@ def main(project_name, experiment_name, config):
     # extract, transform, load data
     train_dataset, validation_dataset, test_dataset = etl_data(
         data_name=config.data_name,
+        root=config.data_root,
         val_split=config.val_split,
     )
 
@@ -206,6 +207,11 @@ def main(project_name, experiment_name, config):
         model.apply(normalize_weight)
 
     # shift to CUDA
+    if config.device == 'cuda:0' and torch.cuda.device_count() > 1:
+        print("Using multiple GPUs: ", torch.cuda.device_count(), "GPUs!")
+        # dim = 0 [30, xxx] -> [10, ...], [10, ...], [10, ...] on 3 GPUs
+        model = nn.DataParallel(model)
+
     model = model.to(config.device)
 
     # track model with wandb

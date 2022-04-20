@@ -6,7 +6,7 @@ project_name: "dp_benchmark"
 experiment_name: "" 
 including_test: true
 max_epochs: 30
-device: 'cuda'
+device: 'cuda:0'
 print_every_iter: 50 # for training (validation after every epoch)
 
 #########
@@ -55,6 +55,7 @@ dense: True
 # Data #
 ######## 
 data_name: 'imagenette'
+data_root: '~/DPBenchmark/data'
 batch_size: 256
 physical_batch_size: 32
 num_classes: 10

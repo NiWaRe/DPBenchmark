@@ -1,9 +1,13 @@
 ###########
 # General #
 ###########
+project_name: "dp_benchmark"
+# leave blank for sweep
+experiment_name: "" 
 including_test: true
 max_epochs: 30
 device: 'cuda'
+print_every_iter: 50 # for training (validation after every epoch)
 
 #########
 # Model #
@@ -15,9 +19,9 @@ device: 'cuda'
   # simple_conv, stage_conv, en_scaling_base_model, en_scaling_residual_model, 
   # googlenet, xception, efficientnet_b[0-7]
   # any other model is tried to be created from the timm library
-model_name: 'resnet18'
+model_name: 'en_scaling_residual_model'
 pretrained: False
-weight_init: False # xavier_uniform (init for selu at the moment!)
+weight_init: True # xavier_uniform (init for selu at the moment!)
 weight_norm: False
 # for SimpleConvNet and DepthConvNet
 kernel_size: 3
@@ -37,7 +41,7 @@ after_conv_fc_str: 'mxp_gn'
 activation_fc_str: 'selu'
 skip_depth: 2
 # for en_scaling_*
-depth: 1.0
+depth: 4.0
 width: 8.0
 # depthwise seperable convolutions
 dsc: False
@@ -45,22 +49,23 @@ dsc: False
 # skip_depth and halve_dim will be ignored
 # width ~ growing factor
 # depth = num of Conv-AfterConvFc-Activation triples per DenseBlock
-dense: False
+dense: True
 
 ######## 
 # Data #
 ######## 
 data_name: 'imagenette'
-batch_size: 32
-virtual_batch_size: 32 
+batch_size: 256
+physical_batch_size: 32
 num_classes: 10
+val_split: 0.2
 
 ############# 
 # Optimizer #
 ############# 
 # possible optims: sgd, adam
 optimizer: 'sgd'
-lr: 0.05
+lr: 0.002
 momentum: 0.9
 weight_decay: 0.0002
 lr_scheduler: true
@@ -70,9 +75,8 @@ lr_scheduler: true
 #############
 dp_tool: "opacus"
 dp: true
-L2_clip: 9.972 
+L2_clip: 0.1
 #noise_multiplier: 0.4272 
-target_epsilon: 10.0
+target_epsilon: 7.0
+target_delta: 0.00001
 abort: true
-target_delta: 1e-5
-fallback_to_rdp: false

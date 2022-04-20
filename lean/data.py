@@ -41,13 +41,18 @@ class ImageNetteDataClass(Dataset):
         # convert labels from string to ints (for internals of lightning)
         data_info = pd.read_csv(self.root_dir+"noisy_imagenette.csv")
         unique_labels = data_info[noisy_labels].unique().tolist()
-        map = {unique_labels[i]:i for i in range(len(unique_labels))}
+
+        # create a map from unique str targets to int targets
+        self.map = {unique_labels[i]:i for i in range(len(unique_labels))}
+        
+        # create extra column 'targets' with new int targets
         data_info = data_info.assign(
             targets=[
-                map[data_info[noisy_labels].iloc[i]]
+                self.map[data_info[noisy_labels].iloc[i]]
                 for i in range(len(data_info))
             ],
         )
+        
         # extract only train dataset or validation dataset
         self.data_info = data_info[
             data_info.is_valid==False
@@ -92,7 +97,10 @@ class ImageNetteDataClass(Dataset):
 
 # TODO: add validation set with train_test_split()
 # TODO: add CIFAR10, as option
-def etl_data(): 
+def etl_data(
+        data_name: str,
+        val_split: float,
+    ): 
     """
         Function to get normalized dataset.
     """
@@ -108,6 +116,7 @@ def etl_data():
         ]
     )
 
+    # first create two training datasets and then select the relevant portions
     train_dataset = ImageNetteDataClass(
         root = "/home/nico/DPBenchmark/data",
         train = True,
@@ -115,6 +124,30 @@ def etl_data():
         target_transform = imagenette_transforms,
     )
 
+    val_dataset = ImageNetteDataClass(
+        root = "/home/nico/DPBenchmark/data",
+        train = True,
+        transform = imagenette_transforms,
+        target_transform = imagenette_transforms,
+    )
+
+    # create shuffled indices for every sample in the train_dataset
+    indices = list(range(len(train_dataset)))
+    np.random.shuffle(indices)
+
+    # take the first indices for the validation set
+    val_indices = indices[
+        :int(len(indices)*val_split)
+    ]
+    train_indices = indices[
+        int(len(indices)*val_split):
+    ]
+
+    # only select the training and validation part
+    train_dataset.data_info = train_dataset.data_info.iloc[train_indices]
+    val_dataset.data_info = val_dataset.data_info.iloc[val_indices]
+
+    # create test dataset
     test_dataset = ImageNetteDataClass(
         root = "/home/nico/DPBenchmark/data",
         train = False,
@@ -122,4 +155,9 @@ def etl_data():
         target_transform = imagenette_transforms,
     )
 
-    return train_dataset, test_dataset
+    # check if length make sense
+    print(f"Datasets created, train len: {len(train_dataset)}, \
+            val len: {len(val_dataset)}, \
+            test len: {len(test_dataset)}")
+
+    return train_dataset, val_dataset, test_dataset

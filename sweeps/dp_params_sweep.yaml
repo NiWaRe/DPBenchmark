@@ -7,8 +7,8 @@ parameters:
   L2_clip:
     distribution: uniform
     # priors from Depth ConvNet General Sweep
-    max: 10.0 #20
-    min: 0.5 #0.01
+    max: 20.0 #20
+    min: 0.1 #0.01
   # model.noise_multiplier:
   #   distribution: uniform
   #   # typical range according to opacus: https://opacus.ai/docs/faq: [2.0, 0.1] 
@@ -35,10 +35,10 @@ parameters:
     values: 
     #- 15
     #- 30
-    - 60
+    #- 60
     - 90
     - 120
-    #- 180
+    - 180
   # model.target_delta:
   #   distribution: uniform
   #   max: 2e-05

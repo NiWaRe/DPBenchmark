@@ -99,10 +99,10 @@ def test(model, test_loader, criterion, config, test):
 
     # iterate through validation dataset
     with torch.no_grad():
-        for images, labels in tqdm(test_loader, desc="Validation"):
+        for images, labels in tqdm(test_loader, desc="Test" if test else "Validation"):
             # shift to device
-            images = Variable(images).to(config.device)
-            labels = Variable(labels).to(config.device)
+            images = images.to(config.device)
+            labels = labels.to(config.device)
 
             # forward pass only to get logits/output
             outputs = model(images)
@@ -124,11 +124,11 @@ def test(model, test_loader, criterion, config, test):
 
     val_accuracy = correct / total
     if test: 
-        metric_acc = "val_acc"
-        metric_loss = "val_loss"
-    else: 
         metric_acc = "test_acc"
         metric_loss = "test_loss"
+    else: 
+        metric_acc = "val_acc"
+        metric_loss = "val_loss"
     metrics = {
         metric_acc: val_accuracy, 
         metric_loss: val_loss,  
@@ -164,7 +164,7 @@ def main(project_name, experiment_name, config):
 
     val_loader = torch.utils.data.DataLoader(dataset=validation_dataset,
                                                batch_size=config.batch_size,
-                                               shuffle=True)
+                                               shuffle=False)
 
     test_loader = torch.utils.data.DataLoader(dataset=test_dataset,
                                               batch_size=config.batch_size,

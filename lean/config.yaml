@@ -7,7 +7,7 @@ experiment_name: ""
 including_test: true
 max_epochs: 30
 device: 'cuda:0'
-use_all_gpus: true
+use_all_gpus: false
 print_every_iter: 50 # for training (validation after every epoch)
 
 #########
@@ -56,9 +56,9 @@ dense: True
 # Data #
 ######## 
 data_name: 'imagenette'
-data_root: '/vol/space/projects'
+data_root: '/home/nico/DPBenchmark/data'
 batch_size: 256
-physical_batch_size: 8 # 16GB for SmoothNet W80D50
+physical_batch_size: 16
 num_classes: 10
 val_split: 0.2
 

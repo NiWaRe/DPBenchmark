@@ -4,10 +4,10 @@ metric:
   goal: minimize
   name: val_loss
 parameters:
-  model.L2_clip:
+  L2_clip:
     distribution: uniform
     # priors from Depth ConvNet General Sweep
-    max: 4.0 #20
+    max: 10.0 #20
     min: 0.5 #0.01
   # model.noise_multiplier:
   #   distribution: uniform
@@ -30,7 +30,7 @@ parameters:
     # - 64
     # - 128
   # NOTE: more options could be added for final searches
-  trainer.max_epochs:
+  max_epochs:
     distribution: categorical
     values: 
     #- 15
@@ -47,11 +47,11 @@ parameters:
   #   distribution: uniform
   #   max: 100
   #   min: 10
-program: trainer.py
-command:
-  - ${env}
-  - ${interpreter}
-  - ${program}
-  - "--config"
-  - "configs_sweep.yaml"
-  - ${args}
+program: trainer_lean.py
+# command:
+#   - ${env}
+#   - ${interpreter}
+#   - ${program}
+#   - "--config"
+#   - "configs_sweep.yaml"
+#   - ${args}

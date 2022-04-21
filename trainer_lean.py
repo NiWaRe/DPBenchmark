@@ -259,8 +259,9 @@ def main(project_name, experiment_name, config):
         train(epoch, model, train_loader, optimizer, lr_scheduler, criterion, privacy_engine, config)
         test(model, val_loader, criterion, config, test=False)
     
-    # test on real training set after training
-    test(model, test_loader, criterion, config, test=True)
+    # test on real test set after training
+    if config.including_test: 
+        test(model, test_loader, criterion, config, test=True)
 
     ##############
     # SAVE MODEL #

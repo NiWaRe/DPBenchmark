@@ -31,7 +31,8 @@ from lean.models import get_model
 from lean.utils import get_grad_norm, initialize_weight, normalize_weight
 
 # opacus
-from opacus.validators import ModuleValidator
+from opacus.validators import ModuleValidator, register_module_validator
+from opacus.validators.utils import register_module_fixer
 from opacus import PrivacyEngine
 from opacus.utils.batch_memory_manager import BatchMemoryManager
 
@@ -217,6 +218,12 @@ def main(project_name, experiment_name, config):
     wandb.watch(model)
     wandb.config.model_params_trainable = sum(p.numel() for p in model.parameters() if p.requires_grad)
     wandb.config.model_params_total = sum(p.numel() for p in model.parameters())
+    
+    # to save model architecture in wandb   
+    print(f"Model Size: {wandb.config.model_params_total/1000}K")
+    print(model) 
+    with open(os.path.join(wandb.run.dir, "model_architecture.txt"), 'w') as f: 
+        f.write(model.__str__())
 
     ############
     # TRAINING #

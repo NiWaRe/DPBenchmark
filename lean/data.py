@@ -99,6 +99,7 @@ class ImageNetteDataClass(Dataset):
 # TODO: add CIFAR10, as option
 def etl_data(
         data_name: str,
+        root: str,
         val_split: float,
     ): 
     """
@@ -118,14 +119,15 @@ def etl_data(
 
     # first create two training datasets and then select the relevant portions
     train_dataset = ImageNetteDataClass(
-        root = "/home/nico/DPBenchmark/data",
+        #root = "/home/nico/DPBenchmark/data",
+        root = root,
         train = True,
         transform = imagenette_transforms,
         target_transform = imagenette_transforms,
     )
 
     val_dataset = ImageNetteDataClass(
-        root = "/home/nico/DPBenchmark/data",
+        root = root,
         train = True,
         transform = imagenette_transforms,
         target_transform = imagenette_transforms,
@@ -149,7 +151,7 @@ def etl_data(
 
     # create test dataset
     test_dataset = ImageNetteDataClass(
-        root = "/home/nico/DPBenchmark/data",
+        root = root,
         train = False,
         transform = imagenette_transforms,
         target_transform = imagenette_transforms,

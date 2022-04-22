@@ -6,7 +6,8 @@ project_name: "dp_benchmark"
 experiment_name: "" 
 including_test: true
 max_epochs: 30
-device: 'cuda'
+device: 'cuda:0'
+use_all_gpus: false
 print_every_iter: 50 # for training (validation after every epoch)
 
 #########
@@ -41,7 +42,7 @@ after_conv_fc_str: 'mxp_gn'
 activation_fc_str: 'selu'
 skip_depth: 2
 # for en_scaling_*
-depth: 4.0
+depth: 5.0
 width: 8.0
 # depthwise seperable convolutions
 dsc: False
@@ -55,8 +56,9 @@ dense: True
 # Data #
 ######## 
 data_name: 'imagenette'
+data_root: '/home/nico/DPBenchmark/data'
 batch_size: 256
-physical_batch_size: 32
+physical_batch_size: 16
 num_classes: 10
 val_split: 0.2
 

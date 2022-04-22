@@ -39,55 +39,50 @@ from opacus.utils.batch_memory_manager import BatchMemoryManager
 # TRAIN FUNCTIONS #
 ###################
 
-def train(epoch, model, train_loader, optimizer, lr_scheduler, criterion, privacy_engine, config): 
+def train(epoch, model, train_loader, optimizer, lr_scheduler, criterion, config, privacy_engine=None): 
     """
         Train for one epoch.
     """
     model.train()
-    with BatchMemoryManager(
-        data_loader=train_loader, 
-        max_physical_batch_size=config.physical_batch_size, 
-        optimizer=optimizer
-    ) as memory_safe_data_loader:
-        for i, (images, labels) in enumerate(
-                tqdm(memory_safe_data_loader, desc="Training iterations/epochs")
-            ):
-            # shift to device
-            images = Variable(images).to(config.device)
-            labels = Variable(labels).to(config.device)
+    for i, (images, labels) in enumerate(
+            tqdm(train_loader, desc="Training iterations/epochs")
+        ):
+        # shift to device
+        images = Variable(images).to(config.device)
+        labels = Variable(labels).to(config.device)
 
-            # standard training loop block
-            optimizer.zero_grad()
-            outputs = model(images)
+        # standard training loop block
+        optimizer.zero_grad()
+        outputs = model(images)
 
-            loss = criterion(outputs, labels)
-            loss.backward()
+        loss = criterion(outputs, labels)
+        loss.backward()
 
-            ggn = get_grad_norm(model)
-            optimizer.step()
+        ggn = get_grad_norm(model)
+        optimizer.step()
 
-            if i % config.print_every_iter == 0:
-                # TODO: add accuracy per class
-                # for label in range(10):
-                #     metrics['Accuracy ' + label_names[label]] = correct_arr[label] / total_arr[label]
+        if i % config.print_every_iter == 0:
+            # TODO: add accuracy per class
+            # for label in range(10):
+            #     metrics['Accuracy ' + label_names[label]] = correct_arr[label] / total_arr[label]
 
-                metrics = {
-                    'train_loss': loss, 
-                    'lr-SGD': lr_scheduler.get_last_lr()[0],
-                    'global grad norm': ggn,     
-                }
-                if config.dp: 
-                    metrics['spent_epsilon'] = privacy_engine.get_epsilon(config.target_delta)
-                print(
-                    f"\tTrain Epoch: {epoch} \t"
-                    f"Train Loss: {loss:.6f} "
-                    f"lr-SGD: {metrics['lr-SGD']:.6f} "
-                    f"(ε = {metrics['spent_epsilon']:.2f}, δ = {config.target_delta})" if config.dp else ""
-                )
-                wandb.log(metrics)
+            metrics = {
+                'train_loss': loss, 
+                'lr-SGD': lr_scheduler.get_last_lr()[0],
+                'global grad norm': ggn,     
+            }
+            if config.dp: 
+                metrics['spent_epsilon'] = privacy_engine.get_epsilon(config.target_delta)
+            print(
+                f"\tTrain Epoch: {epoch} \t"
+                f"Train Loss: {loss:.6f} "
+                f"lr-SGD: {metrics['lr-SGD']:.6f} "
+                f"(ε = {metrics['spent_epsilon']:.2f}, δ = {config.target_delta})" if config.dp else ""
+            )
+            wandb.log(metrics)
 
-        # after every epoch do a learning rate step 
-        lr_scheduler.step()
+    # after every epoch do a learning rate step 
+    lr_scheduler.step()
     
 def test(model, test_loader, criterion, config, test): 
     """
@@ -103,10 +98,10 @@ def test(model, test_loader, criterion, config, test):
 
     # iterate through validation dataset
     with torch.no_grad():
-        for images, labels in tqdm(test_loader, desc="Validation"):
+        for images, labels in tqdm(test_loader, desc="Test" if test else "Validation"):
             # shift to device
-            images = Variable(images).to(config.device)
-            labels = Variable(labels).to(config.device)
+            images = images.to(config.device)
+            labels = labels.to(config.device)
 
             # forward pass only to get logits/output
             outputs = model(images)
@@ -128,11 +123,11 @@ def test(model, test_loader, criterion, config, test):
 
     val_accuracy = correct / total
     if test: 
-        metric_acc = "val_acc"
-        metric_loss = "val_loss"
-    else: 
         metric_acc = "test_acc"
         metric_loss = "test_loss"
+    else: 
+        metric_acc = "val_acc"
+        metric_loss = "val_loss"
     metrics = {
         metric_acc: val_accuracy, 
         metric_loss: val_loss,  
@@ -156,6 +151,7 @@ def main(project_name, experiment_name, config):
     # extract, transform, load data
     train_dataset, validation_dataset, test_dataset = etl_data(
         data_name=config.data_name,
+        root=config.data_root,
         val_split=config.val_split,
     )
 
@@ -167,7 +163,7 @@ def main(project_name, experiment_name, config):
 
     val_loader = torch.utils.data.DataLoader(dataset=validation_dataset,
                                                batch_size=config.batch_size,
-                                               shuffle=True)
+                                               shuffle=False)
 
     test_loader = torch.utils.data.DataLoader(dataset=test_dataset,
                                               batch_size=config.batch_size,
@@ -210,6 +206,11 @@ def main(project_name, experiment_name, config):
         model.apply(normalize_weight)
 
     # shift to CUDA
+    if config.device == 'cuda:0' and config.use_all_gpus and torch.cuda.device_count() > 1:
+        print("Using multiple GPUs: ", torch.cuda.device_count(), "GPUs!")
+        # dim = 0 [30, xxx] -> [10, ...], [10, ...], [10, ...] on 3 GPUs
+        model = nn.DataParallel(model)
+
     model = model.to(config.device)
 
     # track model with wandb
@@ -254,11 +255,38 @@ def main(project_name, experiment_name, config):
 
     # training loop
     for epoch in tqdm(range(config.max_epochs), desc="Epochs"):
-        train(epoch, model, train_loader, optimizer, lr_scheduler, criterion, privacy_engine, config)
+        if config.dp:
+            with BatchMemoryManager(
+                data_loader=train_loader, 
+                max_physical_batch_size=config.physical_batch_size, 
+                optimizer=optimizer
+            ) as memory_safe_data_loader:
+                train(
+                    epoch, 
+                    model, 
+                    memory_safe_data_loader, 
+                    optimizer, 
+                    lr_scheduler, 
+                    criterion, 
+                    config,
+                    privacy_engine,
+                )
+        else: 
+            train(
+                    epoch, 
+                    model, 
+                    train_loader, 
+                    optimizer, 
+                    lr_scheduler, 
+                    criterion, 
+                    config,
+                )
+        # in any case validate after each epoch
         test(model, val_loader, criterion, config, test=False)
     
-    # test on real training set after training
-    test(model, test_loader, criterion, config, test=True)
+    # test on real test set after training
+    if config.including_test: 
+        test(model, test_loader, criterion, config, test=True)
 
     ##############
     # SAVE MODEL #

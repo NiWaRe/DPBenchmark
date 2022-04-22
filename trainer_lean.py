@@ -2,6 +2,10 @@
 
 """
 New Opacus Library without PyTorch Lightning.
+This works with Opacus version 1.x 
+1. pip uninstall opacus (to uninstall previous version 0.14.0, if existant)
+2. conda install -c conda-forge opacus
+3. Adapt validators section for batch_norm
 """
 
 # general and logging

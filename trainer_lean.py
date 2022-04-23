@@ -163,11 +163,11 @@ def main(project_name, experiment_name, config):
                                                shuffle=False if config.dp else True)
 
     val_loader = torch.utils.data.DataLoader(dataset=validation_dataset,
-                                               batch_size=config.batch_size,
+                                               batch_size=int(config.physical_batch_size*2),
                                                shuffle=False)
 
     test_loader = torch.utils.data.DataLoader(dataset=test_dataset,
-                                              batch_size=config.batch_size,
+                                              batch_size=int(config.physical_batch_size*2),
                                               shuffle=False)
 
     #########

@@ -926,7 +926,7 @@ def get_model(
         model.last_linear = nn.Linear(1536, output_classes)
     elif model_name=="densenet121": 
         w = 1.0
-        model = timm.create_model("densenet121", pretrained=pretrained, width_factor=w)
+        model = timm.create_model("densenet121", pretrained=pretrained)#, width_factor=w)
         model.classifier = nn.Linear(int(w*1024), output_classes)
     elif model_name=="densenet121_w075": 
         w = 0.75

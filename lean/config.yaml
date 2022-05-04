@@ -20,7 +20,7 @@ print_every_iter: 50 # for training (validation after every epoch)
   # simple_conv, stage_conv, en_scaling_base_model, en_scaling_residual_model, 
   # googlenet, xception, efficientnet_b[0-7]
   # any other model is tried to be created from the timm library
-model_name: 'en_scaling_residual_model'
+model_name: 'resnet9'
 pretrained: False
 weight_init: True # xavier_uniform (init for selu at the moment!)
 weight_norm: False
@@ -56,9 +56,9 @@ dense: True
 # Data #
 ######## 
 data_name: 'imagenette'
-data_root: '/home/nico/DPBenchmark/data'
+data_root: '/u/home/remersch/alpaca_code/DPBenchmark/data'
 batch_size: 256
-physical_batch_size: 16
+physical_batch_size: 64
 num_classes: 10
 val_split: 0.2
 

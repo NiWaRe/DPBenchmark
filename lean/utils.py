@@ -5,10 +5,10 @@ from torch import nn, Size
 from torch.nn.modules import activation
 
 from deepee import SurgicalProcedures
-from data import (
-    MNISTDataModuleDP,
-    CIFAR10DataModuleDP 
-)
+# from data import (
+#     MNISTDataModuleDP,
+#     CIFAR10DataModuleDP 
+# )
 
 # TODO: think of more elegant way of making them available natively
 
@@ -37,11 +37,11 @@ def BN_to_LN(
 
 # to make datamodules available as part of a module,
 # so that they can be passed to LightningDataModule types from the configs.yaml
-def MNISTDataModuleDPClass():
-    return MNISTDataModuleDP
+# def MNISTDataModuleDPClass():
+#     return MNISTDataModuleDP
     
-def CIFAR10DataModuleDPClass():
-    return CIFAR10DataModuleDP
+# def CIFAR10DataModuleDPClass():
+#     return CIFAR10DataModuleDP
 
 # other utility functions
 def get_grad_norm(model, norm_type=2):

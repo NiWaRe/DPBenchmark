@@ -740,26 +740,11 @@ import warnings
 
 
 def conv_bn_act(
-    in_channels, out_channels, pool=False, act_func=nn.ReLU, num_groups=None
+    in_channels, out_channels, pool=False, act_func=nn.ReLU,
 ):
-    if num_groups is not None:
-        warnings.warn("num_groups has no effect with BatchNorm")
     layers = [
         nn.Conv2d(in_channels, out_channels, kernel_size=3, padding=1, bias=False),
         nn.BatchNorm2d(out_channels),
-        act_func(),
-    ]
-    if pool:
-        layers.append(nn.MaxPool2d(2))
-    return nn.Sequential(*layers)
-
-
-def conv_gn_act(in_channels, out_channels, pool=False, act_func=nn.Mish, num_groups=32):
-    """Conv-GroupNorm-Activation
-    """
-    layers = [
-        nn.Conv2d(in_channels, out_channels, kernel_size=3, padding=1, bias=False),
-        nn.GroupNorm(min(num_groups, out_channels), out_channels),
         act_func(),
     ]
     if pool:
@@ -771,9 +756,7 @@ class ResNet9(nn.Module):
         self,
         in_channels: int = 3,
         num_classes: int = 10,
-        act_func: nn.Module = nn.ReLU, #nn.Mish,
-        norm_layer: str = "batch",
-        num_groups: tuple[int, ...] = (8, 8, 8, 8),
+        act_func: nn.Module = nn.ReLU, 
     ):
         """9-layer Residual Network. Architecture:
         conv-conv-Residual(conv, conv)-conv-conv-Residual(conv-conv)-FC
@@ -781,59 +764,42 @@ class ResNet9(nn.Module):
             in_channels (int, optional): Channels in the input image. Defaults to 3.
             num_classes (int, optional): Number of classes. Defaults to 10.
             act_func (nn.Module, optional): Activation function to use. 
-            norm_layer (str, optional): Normalisation layer. One of `batch` or `group`. Defaults to "group".
-            num_groups (tuple[int], optional): Number of groups in GroupNorm layers.\
-            Must be a tuple with 4 elements, corresponding to the GN layer in the first conv block, \
-            the first res block, the second conv block and the second res block. Defaults to (8, 8, 8, 8).
         """
         super().__init__()
 
-        if norm_layer == "batch":
-            conv_block = conv_bn_act
-        elif norm_layer == "group":
-            conv_block = conv_gn_act
-        else:
-            raise ValueError("`norm_layer` must be `batch` or `group`")
-
-        assert (
-            isinstance(num_groups, tuple) and len(num_groups) == 4
-        ), "num_groups must be a tuple with 4 members"
-        groups = num_groups
+        conv_block = conv_bn_act
 
         self.conv1 = conv_block(
-            in_channels, 64, act_func=act_func, num_groups=groups[0]
+            in_channels, 64, act_func=act_func
         )
         self.conv2 = conv_block(
-            64, 128, pool=True, act_func=act_func, num_groups=groups[0]
+            64, 128, pool=True, act_func=act_func
         )
 
         self.res1 = nn.Sequential(
             *[
-                conv_block(128, 128, act_func=act_func, num_groups=groups[1]),
-                conv_block(128, 128, act_func=act_func, num_groups=groups[1]),
+                conv_block(128, 128, act_func=act_func),
+                conv_block(128, 128, act_func=act_func),
             ]
         )
 
         self.conv3 = conv_block(
-            128, 256, pool=True, act_func=act_func, num_groups=groups[2]
+            128, 256, pool=True, act_func=act_func
         )
         self.conv4 = conv_block(
-            256, 256, pool=True, act_func=act_func, num_groups=groups[2]
+            256, 256, pool=True, act_func=act_func
         )
 
         self.res2 = nn.Sequential(
             *[
-                conv_block(256, 256, act_func=act_func, num_groups=groups[3]),
-                conv_block(256, 256, act_func=act_func, num_groups=groups[3]),
+                conv_block(256, 256, act_func=act_func),
+                conv_block(256, 256, act_func=act_func),
             ]
         )
 
         self.MP = nn.AdaptiveMaxPool2d((2, 2))
         self.FlatFeats = nn.Flatten()
         self.classifier = nn.Linear(1024, num_classes)
-
-        self.scale_norm_1 = nn.Identity()  # type:ignore
-        self.scale_norm_2 = nn.Identity()  # type:ignore
 
     def forward(self, xb):
         out = self.conv1(xb)

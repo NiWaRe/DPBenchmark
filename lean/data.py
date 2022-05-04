@@ -3,8 +3,9 @@ import os
 from typing import Optional, Union, Callable, Any, List, Tuple
 
 # data
-from torch.utils.data import DataLoader, Dataset
+from torch.utils.data import DataLoader, Dataset, random_split
 from torchvision import transforms 
+from torchvision.datasets import CIFAR10
 
 # utils
 import numpy as np
@@ -106,56 +107,92 @@ def etl_data(
         Function to get normalized dataset.
     """
 
-    # we take the standard transformation for validation from the Lightning ImageNet Class
-    image_dim = 224
-    imagenette_transforms = transforms.Compose(
-        [
-            transforms.Resize(image_dim + 32),
-            transforms.CenterCrop(image_dim),
-            transforms.ToTensor(),
-            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+    if data_name == "imagenette":
+        # we take the standard transformation for validation from the Lightning ImageNet Class
+        image_dim = 224 
+        imagenette_transforms = transforms.Compose(
+            [
+                transforms.Resize(image_dim + 32),
+                transforms.CenterCrop(image_dim),
+                transforms.ToTensor(),
+                transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+            ]
+        )
+
+        # create datasets
+        train_dataset = ImageNetteDataClass(
+            #root = "/home/nico/DPBenchmark/data",
+            root = root,
+            train = True,
+            transform = imagenette_transforms,
+            target_transform = imagenette_transforms,
+        )
+
+        val_dataset = ImageNetteDataClass(
+            root = root,
+            train = True,
+            transform = imagenette_transforms,
+            target_transform = imagenette_transforms,
+        )
+
+        test_dataset = ImageNetteDataClass(
+            root = root,
+            train = False,
+            transform = imagenette_transforms,
+            target_transform = imagenette_transforms,
+        )
+
+        # create shuffled indices for every sample in the train_dataset
+        indices = list(range(len(train_dataset)))
+        np.random.shuffle(indices)
+
+        # take the first indices for the validation set
+        val_indices = indices[
+            :int(len(indices)*val_split)
         ]
-    )
+        train_indices = indices[
+            int(len(indices)*val_split):
+        ]
 
-    # first create two training datasets and then select the relevant portions
-    train_dataset = ImageNetteDataClass(
-        #root = "/home/nico/DPBenchmark/data",
-        root = root,
-        train = True,
-        transform = imagenette_transforms,
-        target_transform = imagenette_transforms,
-    )
+        # only select the training and validation part
+        train_dataset.data_info = train_dataset.data_info.iloc[train_indices]
+        val_dataset.data_info = val_dataset.data_info.iloc[val_indices]
 
-    val_dataset = ImageNetteDataClass(
-        root = root,
-        train = True,
-        transform = imagenette_transforms,
-        target_transform = imagenette_transforms,
-    )
+    elif data_name == "cifar10":
+        # we take the standard transformation for validation from the CIFAR10 Class
+        image_dim = 32
+        cifar10_transforms = transforms.Compose(
+            [
+                transforms.ToTensor(),
+                transforms.Normalize(
+                    mean=[x / 255.0 for x in [125.3, 123.0, 113.9]],
+                    std=[x / 255.0 for x in [63.0, 62.1, 66.7]],
+                ),
+            ]
+        )
 
-    # create shuffled indices for every sample in the train_dataset
-    indices = list(range(len(train_dataset)))
-    np.random.shuffle(indices)
+        # create datasets
+        train_dataset = CIFAR10(
+            #root = "/home/nico/DPBenchmark/data",
+            root = root,
+            train = True,
+            transform = cifar10_transforms,
+            download = True,
+        )
 
-    # take the first indices for the validation set
-    val_indices = indices[
-        :int(len(indices)*val_split)
-    ]
-    train_indices = indices[
-        int(len(indices)*val_split):
-    ]
+        test_dataset = CIFAR10(
+            root = root,
+            train = False,
+            transform = cifar10_transforms,
+            download = True,
+        )
 
-    # only select the training and validation part
-    train_dataset.data_info = train_dataset.data_info.iloc[train_indices]
-    val_dataset.data_info = val_dataset.data_info.iloc[val_indices]
-
-    # create test dataset
-    test_dataset = ImageNetteDataClass(
-        root = root,
-        train = False,
-        transform = imagenette_transforms,
-        target_transform = imagenette_transforms,
-    )
+        # create shuffled indices for every sample in the train_dataset
+        size_val_dataset = int(len(train_dataset)*val_split)
+        train_dataset, val_dataset = random_split(
+            train_dataset, 
+            [len(train_dataset)-size_val_dataset, size_val_dataset]
+        )
 
     # check if length make sense
     print(f"Datasets created, train len: {len(train_dataset)}, \

@@ -735,6 +735,118 @@ class Args:
         # drop out (default: 0)
         self.dropout_rate = dropout_rate
 
+# modified George Kaissis
+import warnings
+
+
+def conv_bn_act(
+    in_channels, out_channels, pool=False, act_func=nn.ReLU, num_groups=None
+):
+    if num_groups is not None:
+        warnings.warn("num_groups has no effect with BatchNorm")
+    layers = [
+        nn.Conv2d(in_channels, out_channels, kernel_size=3, padding=1, bias=False),
+        nn.BatchNorm2d(out_channels),
+        act_func(),
+    ]
+    if pool:
+        layers.append(nn.MaxPool2d(2))
+    return nn.Sequential(*layers)
+
+
+def conv_gn_act(in_channels, out_channels, pool=False, act_func=nn.Mish, num_groups=32):
+    """Conv-GroupNorm-Activation
+    """
+    layers = [
+        nn.Conv2d(in_channels, out_channels, kernel_size=3, padding=1, bias=False),
+        nn.GroupNorm(min(num_groups, out_channels), out_channels),
+        act_func(),
+    ]
+    if pool:
+        layers.append(nn.MaxPool2d(2))
+    return nn.Sequential(*layers)
+
+class ResNet9(nn.Module):
+    def __init__(
+        self,
+        in_channels: int = 3,
+        num_classes: int = 10,
+        act_func: nn.Module = nn.ReLU, #nn.Mish,
+        norm_layer: str = "batch",
+        num_groups: tuple[int, ...] = (8, 8, 8, 8),
+    ):
+        """9-layer Residual Network. Architecture:
+        conv-conv-Residual(conv, conv)-conv-conv-Residual(conv-conv)-FC
+        Args:
+            in_channels (int, optional): Channels in the input image. Defaults to 3.
+            num_classes (int, optional): Number of classes. Defaults to 10.
+            act_func (nn.Module, optional): Activation function to use. 
+            norm_layer (str, optional): Normalisation layer. One of `batch` or `group`. Defaults to "group".
+            num_groups (tuple[int], optional): Number of groups in GroupNorm layers.\
+            Must be a tuple with 4 elements, corresponding to the GN layer in the first conv block, \
+            the first res block, the second conv block and the second res block. Defaults to (8, 8, 8, 8).
+        """
+        super().__init__()
+
+        if norm_layer == "batch":
+            conv_block = conv_bn_act
+        elif norm_layer == "group":
+            conv_block = conv_gn_act
+        else:
+            raise ValueError("`norm_layer` must be `batch` or `group`")
+
+        assert (
+            isinstance(num_groups, tuple) and len(num_groups) == 4
+        ), "num_groups must be a tuple with 4 members"
+        groups = num_groups
+
+        self.conv1 = conv_block(
+            in_channels, 64, act_func=act_func, num_groups=groups[0]
+        )
+        self.conv2 = conv_block(
+            64, 128, pool=True, act_func=act_func, num_groups=groups[0]
+        )
+
+        self.res1 = nn.Sequential(
+            *[
+                conv_block(128, 128, act_func=act_func, num_groups=groups[1]),
+                conv_block(128, 128, act_func=act_func, num_groups=groups[1]),
+            ]
+        )
+
+        self.conv3 = conv_block(
+            128, 256, pool=True, act_func=act_func, num_groups=groups[2]
+        )
+        self.conv4 = conv_block(
+            256, 256, pool=True, act_func=act_func, num_groups=groups[2]
+        )
+
+        self.res2 = nn.Sequential(
+            *[
+                conv_block(256, 256, act_func=act_func, num_groups=groups[3]),
+                conv_block(256, 256, act_func=act_func, num_groups=groups[3]),
+            ]
+        )
+
+        self.MP = nn.AdaptiveMaxPool2d((2, 2))
+        self.FlatFeats = nn.Flatten()
+        self.classifier = nn.Linear(1024, num_classes)
+
+        self.scale_norm_1 = nn.Identity()  # type:ignore
+        self.scale_norm_2 = nn.Identity()  # type:ignore
+
+    def forward(self, xb):
+        out = self.conv1(xb)
+        out = self.conv2(out)
+        out = self.res1(out) + out
+        out = self.conv3(out)
+        out = self.conv4(out)
+        out = self.res2(out) + out
+        out = self.MP(out)
+        out_emb = self.FlatFeats(out)
+        out = self.classifier(out_emb)
+        return out
+
 def get_model(
     model_name, 
     pretrained, 
@@ -804,6 +916,9 @@ def get_model(
             width=width,
             dsc=dsc,
         )
+    elif model_name=="resnet9":
+        # standard resnet9 implementation (with optional GN parameters)
+        model = ResNet9()
     elif model_name=="resnet18":
         # model = torchvision.models.resnet18(
         #     pretrained=pretrained
@@ -879,6 +994,9 @@ def get_model(
             )
             model.features.init_block.pool = nn.Identity()
             model.features.final_pool = nn.AdaptiveAvgPool2d(output_size=(1,1))
+    elif model_name=="resnet34": 
+        model = timm.create_model("resnet34", pretrained=pretrained)
+        model.fc = nn.Linear(512, output_classes)
     elif model_name=="resnet50": 
         model = timm.create_model("resnet50", pretrained=pretrained)
         model.fc = nn.Linear(2048, output_classes)
@@ -1049,7 +1167,7 @@ def get_model(
         #     param.requires_grad = False
         # adding new classifier which is trained
         # NOTE: b0 was 1280, b3 was 1536, b5 was 2048, b7 was 2560
-        model.fc = nn.Linear(2048, output_classes)
+        model.classifier = nn.Linear(1280, output_classes)
 
     # TODO: surgical procedures have to be done automatically depending on model.
     #model = ModelSurgeon(SurgicalProcedures.BN_to_GN).operate(model)

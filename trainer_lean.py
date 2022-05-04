@@ -69,7 +69,7 @@ def train(epoch, model, train_loader, optimizer, lr_scheduler, criterion, config
 
             metrics = {
                 'train_loss': loss, 
-                'lr-SGD': lr_scheduler.get_last_lr()[0],
+                'lr-SGD': lr_scheduler.get_last_lr()[0] if config.lr_scheduler else config.lr,
                 'global grad norm': ggn,     
             }
             if config.dp: 
@@ -83,7 +83,8 @@ def train(epoch, model, train_loader, optimizer, lr_scheduler, criterion, config
             wandb.log(metrics)
 
     # after every epoch do a learning rate step 
-    lr_scheduler.step()
+    if config.lr_scheduler:
+        lr_scheduler.step() 
     
 def test(model, test_loader, criterion, config, test): 
     """
@@ -244,6 +245,8 @@ def main(project_name, experiment_name, config):
                 step_size=5 if config.dp else 10, #1, 10
                 gamma=0.9 if config.dp else 0.7, #0.9 for DP, 0.7 for no-DP 
         )
+    else: 
+        lr_scheduler = None
 
     # change privacy settings if necessary 
     if config.dp:

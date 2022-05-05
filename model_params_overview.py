@@ -5,6 +5,7 @@ from torch import onnx, rand, nn
 from deepee import ModelSurgeon
 from deepee.surgery import SurgicalProcedures
 from functools import partial
+from torchsummary import summary
 
 def num_non_trainable_parameters(model):
     return sum(p.numel() for p in model.parameters() if not p.requires_grad )
@@ -51,5 +52,6 @@ if __name__ == "__main__":
     # smoothnet = get_model('en_scaling_residual_model', False, 10, 'imagenette', 3, [16, 32], 1, 8.0, 5.0, True, 'mxp_gn', 'selu', 2, True, False)
     print(f"SmoothNet: \t Trainable: {num_trainable_parameters(smoothnet):,}\tNon-trainable: {num_non_trainable_parameters(smoothnet):,}")
 
-    print(smoothnet)
-    onnx.export(smoothnet, rand((1, 3, 160, 160)), "smoothnet_imagenette.onnx", input_names=["Image"], output_names=["Prediction"])
+    # print(smoothnet)
+    # onnx.export(smoothnet, rand((1, 3, 160, 160)), "smoothnet_imagenette.onnx", input_names=["Image"], output_names=["Prediction"])
+    print(summary(smoothnet, input_size=(3, 224, 224), device='cpu'))

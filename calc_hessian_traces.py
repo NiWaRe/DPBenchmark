@@ -28,6 +28,10 @@ np.random.seed(1302)
 # %%
 parser = ArgumentParser()
 parser.add_argument("--data_name", type=str, required=True, choices=["cifar10", "imagenette"], help='Which dataset')
+parser.add_argument("--iterations", type=int, required=True, help="Max Iterations for hessian trace power iteration")
+parser.add_argument("--num_samples", type=int, required=True, help='Number of samples to calculate hessian')
+parser.add_argument("--no_cuda", action='store_false', help='Refrain from using cuda')
+parser.add_argument("--compute_batch_size", type=int, default=32, help='Virtual batch size to calculate hessian')
 args = parser.parse_args()
 
 # %%
@@ -167,10 +171,10 @@ if data_name == 'imagenette':
     models["efficientnetb0"] = efficientnetb0
 
 
-    compute_batch_size = 12
-    iterations = 128
-    num_samples = 256
-    cuda = True
+    # compute_batch_size = 12
+    # iterations = 128
+    # num_samples = 256
+    # cuda = True
 elif data_name == 'cifar10':
 
     # resnet18=get_model("resnet18", False, 10, "cifar10", 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)
@@ -181,6 +185,12 @@ elif data_name == 'cifar10':
     rd = {k.replace("_module.", ""):v for k,v in rd.items()}
     resnet34.load_state_dict(rd)
     models["resnet34"]=resnet34
+    densenet121=get_model("densenet121", False, 10, "cifar10", 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)
+    densenet121 = surgeon.operate(densenet121)
+    dense_dict = torch.load("densenet121_gn8_cifar10_eps7.pt")
+    dense_dict = {k.replace("_module.", ""):v for k,v in dense_dict.items()}
+    densenet121.load_state_dict(dense_dict)
+    models["densenet121"]=densenet121
     # resnet50=get_model("resnet50", False, 10, "cifar10", 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)
     # densenet121=get_model("densenet121", False, 10, "cifar10", 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)
     # smoothnet = get_model("en_scaling_residual_model", False, 10, "cifar10", 0, 0,0,8, 5, False, "max_pool", "selu", 0, True,  False)
@@ -190,10 +200,11 @@ elif data_name == 'cifar10':
     smoothnet.load_state_dict(sd)
     models["smoothnet"] = smoothnet
 
-    compute_batch_size = 128
-    iterations = 128
-    num_samples = 10000
-    cuda = True
+# compute_batch_size = 128
+#     iterations = 128
+#     num_samples = 10000
+#     cuda = True
+    
 # %%
 # %%
 # create loss function
@@ -205,7 +216,7 @@ train_loader, test_loader = getData(train_bs=1, name=data_name)
 # for illustrate, we only use one batch to do the tutorial
 input_targets = []
 for i, (inputs, targets) in enumerate(train_loader):
-    if i>=num_samples:
+    if i>=args.num_samples:
         break
     input_targets.append((inputs.squeeze(), targets.squeeze()))
 class SmallDataset(torch.utils.data.Dataset):
@@ -218,10 +229,10 @@ class SmallDataset(torch.utils.data.Dataset):
 
     def __len__(self):
         return len(self.data)
-if data_name == 'cifar10':
-    pass
-elif data_name == 'imagenette':
-    train_loader = torch.utils.data.DataLoader(SmallDataset(input_targets), batch_size=compute_batch_size)
+# if data_name == 'cifar10':
+#     pass
+# elif data_name == 'imagenette':
+train_loader = torch.utils.data.DataLoader(SmallDataset(input_targets), batch_size=args.compute_batch_size)
     # data = next(iter(smallDataloader))
 
 # %%
@@ -230,22 +241,22 @@ for name, model in tqdm(models.items(), total=len(models), desc='Models:', leave
     # we use cuda to make the computation fast
     traces = []
     # for input, targets in tqdm(input_targets, total=len(input_targets), desc="Iterations", leave=False):
-    if cuda:
+    if not args.no_cuda:
         model = model.cuda()
         inputs, targets = inputs.cuda(), targets.cuda()
     # hessian_comp = hessian(model, criterion, data=(inputs, targets), cuda=cuda)
-    hessian_comp = hessian(model, criterion, dataloader=train_loader, cuda=cuda)
+    hessian_comp = hessian(model, criterion, dataloader=train_loader, cuda=not args.no_cuda)
         # top_eigenvalues, top_eigenvector = hessian_comp.eigenvalues(maxIter=iterations)
         # top_eigenvalues = top_eigenvalues[-1]
         # model_results["TopEigenvalue":top_eigenvalues]
         # print(f"The top Hessian eigenvalue of {name} is {top_eigenvalues:.4f}\t(iter={iterations})")
-    trace = np.mean(hessian_comp.trace(maxIter=iterations))
+    trace = np.mean(hessian_comp.trace(maxIter=args.iterations))
         # traces.append(trace)
         # print(f"Trace for {name}: {trace:.2f}\t(iter={iterations})")
 
     results[name] = {"Trace":trace}
 df = pd.DataFrame.from_dict(results, orient="columns")
-df.to_csv(f"smoothness_{iterations}iter_{num_samples}samples_{data_name}.csv", index=False)
+df.to_csv(f"smoothness_{args.iterations}iter_{args.num_samples}samples_{data_name}.csv", index=False)
 print(df)
 
     

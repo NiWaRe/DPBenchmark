@@ -15,3 +15,12 @@ Three important files:
     * Start/Stop sync: `wandb online`/`wandb offline`
 4. *Optional: Change Opacus BatchNorm Layers*
     * For example in *opacus/validators/batch_norm.py*: `nn.GroupNorm(math.gcd(32, module.num_features), module.num_features, affine=module.affine)`to `nn.GroupNorm(math.gcd(8, module.num_features), module.num_features, affine=module.affine)`.
+
+# Usage
+1. Configure `configs.yaml` 
+2. Run `python trainer_lean.py`
+3. It is compatible with sweeps over the L2-clip and number of epochs using the sweep functionality of weights&biases, which runs `python trainer_lean.py --L2_clip=1.0 --max_epochs=90` in the background. 
+    * Under `sweeps/dp_params_sweep.yaml` the main sweep params are defined
+
+# Experiments 
+See under `/experiments` to see more information and also the most important values of the experiments.

@@ -324,14 +324,6 @@ if __name__ == '__main__':
     # start training with name and config 
     main(config['project_name'], config['experiment_name'], config)
 
-# [x] 1. Do Validation Data
-# [x] 2. Test with WandB Monitoring
-# [x] 3. Add Opacus
-# [x] 4. Test with WandB Sweep
-# [ ] 5. Example pictures and model checkpoint in wandb
-
-## issues 
-# step size the same?
+## open features 
 # patience, divergence checks not implemented
-# model.eval() in other would work as well (val loader error)? last time val loader was also data loader.
 # update torch? (to not get warning)

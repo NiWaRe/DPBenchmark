@@ -16,18 +16,12 @@ import torchvision
 from torch import nn
 import torch.nn.functional as F
 
-# data
-from data import (
-    MNISTDataModuleDP,
-    CIFAR10DataModuleDP
-)
-
 # differential privacy
 from deepee import (PrivacyWrapper, PrivacyWatchdog, UniformDataLoader,
                      ModelSurgeon, SurgicalProcedures, watchdog)
 
 # own utility functions and classes
-from utils import Lambda, getAfterConvFc, getActivationFunction
+from lean.utils import Lambda, getAfterConvFc, getActivationFunction
 
 # additional models
 #sys.path.append(os.path.join(os.path.dirname(__file__), 'local_models/CondenseNet'))

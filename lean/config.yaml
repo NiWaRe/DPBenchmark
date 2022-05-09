@@ -2,10 +2,9 @@
 # General #
 ###########
 project_name: "dp_benchmark"
-# leave blank for sweep
-experiment_name: "" 
+experiment_name: "very_low_eps_test" # leave blank for sweep
 including_test: true
-max_epochs: 30
+max_epochs: 90
 device: 'cuda:0'
 use_all_gpus: false
 print_every_iter: 50 # for training (validation after every epoch)
@@ -20,9 +19,9 @@ print_every_iter: 50 # for training (validation after every epoch)
   # simple_conv, stage_conv, en_scaling_base_model, en_scaling_residual_model, 
   # googlenet, xception, efficientnet_b[0-7]
   # any other model is tried to be created from the timm library
-model_name: 'resnet9'
+model_name: 'en_scaling_residual_model'
 pretrained: False
-weight_init: True # xavier_uniform (init for selu at the moment!)
+weight_init: True # xavier_uniform (set correct activation function in utils.py)
 weight_norm: False
 # for SimpleConvNet and DepthConvNet
 kernel_size: 3
@@ -55,10 +54,10 @@ dense: True
 ######## 
 # Data #
 ######## 
-data_name: 'imagenette'
+data_name: 'imagenette' # or cifar10
 data_root: '/u/home/remersch/alpaca_code/DPBenchmark/data'
 batch_size: 256
-physical_batch_size: 64
+physical_batch_size: 32
 num_classes: 10
 val_split: 0.2
 

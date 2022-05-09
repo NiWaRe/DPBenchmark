@@ -2,9 +2,9 @@
 This is the WIP codebase of the ongoing research project on the benchmarking of different popular machine learning design choices in differentially private learning systems. This work mainly focuses on Image Classification and Segmentation on standard image datasets and medical datasets. Main tools used are Opacus, PyTorch Lightning and Weights&Biases.
 
 Three important files: 
-* `trainer.py` - lightningCLI with overloaded training functions and implemented hooks, and the main lightning module wrapper class to work with deepee DP.
-* `data.py` - lightning datamodules adapted to work with DP.
-* `models.py` - raw models. 
+* `trainer_lean.py` - the main training file parsing the configurations, communicating with wandb if wanted, using opacus if wanted. In the `old_opacus_codebase` branch an earlier implementation based on a earlier version of opacus (and deepee) was well as integration with PyTorch Lightning can be found. 
+* `data.py` - for now adapted model classes for CIFAR10, ImageNette.
+* `models.py` - custom models, and model generators. 
 
 # Installation 
 1. Create conda env with `conda env create -f setup/environment-yaml`

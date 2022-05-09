@@ -3,8 +3,10 @@ This is the WIP codebase of the ongoing research project on the benchmarking of 
 
 Three important files: 
 * `trainer_lean.py` - the main training file parsing the configurations, communicating with wandb if wanted, using opacus if wanted. In the `old_opacus_codebase` branch an earlier implementation based on a earlier version of opacus (and deepee) was well as integration with PyTorch Lightning can be found. 
-* `data.py` - for now adapted model classes for CIFAR10, ImageNette.
-* `models.py` - custom models, and model generators. 
+* `lean/data.py` - for now adapted model classes for CIFAR10, ImageNette.
+* `lean/models.py` - custom models, and model generators. 
+* `lean/utils.py` - custom utility functions. 
+* `config.yaml` - to select the models, data, optimization, DP params.
 
 # Installation 
 1. Create conda env with `conda env create -f setup/environment-yaml`

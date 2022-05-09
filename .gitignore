@@ -10,6 +10,9 @@ __pycache__/
 # C extensions
 *.so
 
+# torch dumps
+*.pt
+
 # Distribution / packaging
 .Python
 build/

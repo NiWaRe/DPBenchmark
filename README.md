@@ -18,7 +18,7 @@ Three important files:
 
 # Usage
 1. Configure `configs.yaml` 
-2. Run `python trainer_lean.py`
+2. Run `python trainer_lean.py` (if using wandb don't forget `wandb online`)
 3. It is compatible with sweeps over the L2-clip and number of epochs using the sweep functionality of weights&biases, which runs `python trainer_lean.py --L2_clip=1.0 --max_epochs=90` in the background. 
     * Under `sweeps/dp_params_sweep.yaml` the main sweep params are defined
 

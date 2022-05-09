@@ -3,6 +3,11 @@ This section contains all the notebooks and scripts for the visualizations, smoo
 <br>
 <br>
 Most important files include: 
-* `additional_vizs.ipynb` - used to generate all the main visualizations, also contains the most important results from the experimental study from weights&biases. 
+* `additional_vizs.ipynb` - used to generate all the main visualizations, also *contains the most important results* from the experimental study from weights&biases. 
 * `thesis_table_generator.ipynb` - this is used to fetch and process the most important values from weights&biases.
 * `Hessian_Tutorial.ipynb` - this is an adapted version of the example notebook of PyHessian which we use to calculate smoothness caracteristics (hessian traces, etc.)
+
+# Results
+This is a list of the most important experiments (for the most up-to-date see paper on arxiv). 
+<br><br>
+**WILL BE DONE SOON**.

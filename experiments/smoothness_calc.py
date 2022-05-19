@@ -74,6 +74,26 @@ def test(model, test_loader, cuda=True):
     print('testing_correct: ', correct / total_num, '\n')
     return correct / total_num
 
+# relative trained model locations
+TRAINED_MODELS={
+    "cifar10":{
+        "smoothnet":"./trained_models/CIFAR10_models/smoothnetw80d50_cifar10_180e_eps7.pt",
+        "resnet9":"./trained_models/CIFAR10_models/resent9_gn8_cifar10_120e_eps7.pt",
+        "resnet18":"./trained_models/CIFAR10_models/resnet18_gn8_cifar10_180e_eps7.pt",
+        "resnet34":"./trained_models/CIFAR10_models/resnet34_gn8_cifar10_120e_eps7.pt",
+        "densenet121":"./trained_models/CIFAR10_models/densenet121_gn8_cifar10_120e_eps7.pt",
+        "efficientnetb0":"./trained_models/CIFAR10_models/efficientnetb0_gn8_cifar10_180e_eps7.pt",
+    },
+    "imagenette":{
+        "smoothnet":"./trained_models/ImageNette_models/smoothnetw80d50_imagenette_120e_eps7.pt",
+        "resnet9":"./trained_models/ImageNette_models/NO_MODEL!", # TODO: add model
+        "resnet18":"./trained_models/ImageNette_models/resnet18_gn8_imagenette_180e_eps7.pt",
+        "resnet34":"./trained_models/ImageNette_models/resnet34_gn8_imagenette_120e_eps7.pt",
+        "densenet121":"./trained_models/ImageNette_models/densenet121_gn8_imagenette_180e_eps7.pt",
+        "efficientnetb0":"./trained_models/ImageNette_models/efficientnetb0_gn8_imagenette_120e_eps7.pt",
+    },
+}
+
 def get_model_simple(
     architecture = 'smoothnet', 
     data = 'cifar10',
@@ -97,13 +117,11 @@ def get_model_simple(
     #     dsc
     # )
     surgeon = ModelSurgeon(partial(SurgicalProcedures.BN_to_GN, num_groups=8))
-    if architecture=='densenet':
+    if architecture=='densenet121':
         model=get_model("densenet121", False, 10, data, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)
         model = surgeon.operate(model)
         dense_dict = torch.load(
-            "./trained_models/CIFAR10_models/densenet121_gn8_cifar10_120e_eps7.pt" 
-            if data=="cifar10" else
-            "./trained_models/ImageNette_models/", 
+            TRAINED_MODELS[data][architecture], 
             map_location=torch.device('cuda' if cuda else 'cpu'),
         )
         dense_dict = {k.replace("_module.", ""):v for k,v in dense_dict.items()}
@@ -111,7 +129,7 @@ def get_model_simple(
     elif architecture == 'smoothnet':
         model = get_model('en_scaling_residual_model', False, 10, data, 3, [16, 32], 1, 5, 8, True, 'mxp_gn', 'selu', 2, True, False)
         res_dict = torch.load(
-            "./trained_models/CIFAR10_models/smoothnetw80d50_cifar10_180e_eps7.pt",
+            TRAINED_MODELS[data][architecture], 
             map_location=torch.device('cuda' if cuda else 'cpu'),
         )
         res_dict = {k.replace("_module.", ""):v for k,v in res_dict.items()}
@@ -121,7 +139,7 @@ def get_model_simple(
         model = surgeon.operate(model)
         model.fc = torch.nn.Linear(512, 10)
         res_dict = torch.load(
-            "./trained_models/CIFAR10_models/resnet34_gn8_cifar10_120e_eps7.pt",
+            TRAINED_MODELS[data][architecture],
             map_location=torch.device('cuda' if cuda else 'cpu'),
         )
         res_dict = {k.replace("_module.", ""):v for k,v in res_dict.items()}
@@ -130,7 +148,7 @@ def get_model_simple(
         model=get_model("resnet18", False, 10, data, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)
         model = surgeon.operate(model)
         res_dict = torch.load(
-            "./trained_models/CIFAR10_models/resnet18_gn8_cifar10_180e_eps7.pt",
+            TRAINED_MODELS[data][architecture],
             map_location=torch.device('cuda' if cuda else 'cpu'),
         )
         res_dict = {k.replace("_module.", ""):v for k,v in res_dict.items()}
@@ -139,7 +157,7 @@ def get_model_simple(
         model=get_model("resnet9", False, 10, data, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)
         model = surgeon.operate(model)
         res_dict = torch.load(
-            "./trained_models/CIFAR10_models/resent9_gn8_cifar10_120e_eps7.pt",
+            TRAINED_MODELS[data][architecture],
             map_location=torch.device('cuda' if cuda else 'cpu'),
         )
         res_dict = {k.replace("_module.", ""):v for k,v in res_dict.items()}
@@ -149,7 +167,7 @@ def get_model_simple(
         model.classifier = nn.Linear(1280, 10)
         model = surgeon.operate(model)
         eff_dict = torch.load(
-            "./trained_models/CIFAR10_models/efficientnetb0_gn8_cifar10_180e_eps7.pt",
+            TRAINED_MODELS[data][architecture],
             map_location=torch.device('cuda' if cuda else 'cpu'),
         )
         eff_dict = {k.replace("_module.", ""):v for k,v in eff_dict.items()}
@@ -205,7 +223,7 @@ def calc_trace(
     ): 
 
     # get model
-    model = get_model_simple(architecture, cuda)
+    model = get_model_simple(architecture, data, cuda)
 
     # create loss function
     criterion = torch.nn.CrossEntropyLoss()
@@ -230,27 +248,27 @@ def calc_trace(
 # rseed(1302)
 # np.random.seed(1302)
 if __name__ == "__main__":
-    models = ['resnet9', 'resnet18', 'densenet', 'smoothnet'] # 'efficientnetb0' CUDA memory access error, # done: 'resnet34',   
+    models = ['smoothnet'] # 'efficientnetb0' CUDA memory access error, # not yet available: 'resnet9' # done: 'resnet34', 'densenet121', 'densenet121', 'resnet18'
     data = 'imagenette' # alternative: cifar10
     cuda = True
     for model in models: 
-        # calculate 1st and 2nd eval and evec of hessian
-        calc_ev(
-            architecture = model,
-            data = data,
-            data_root = '/u/home/remersch/DPBenchmark/data',
-            train_bs = 64,
-            max_train_samples = 4096,
-            max_iter = 100,
-            cuda = cuda,
-        )
-
         # calculate the hessian trace
         calc_trace(
             architecture = model,
             data = data,
             data_root = '/u/home/remersch/DPBenchmark/data',
-            train_bs = 64,
+            train_bs = 256,
+            max_train_samples = 4096,
+            max_iter = 100,
+            cuda = cuda,
+        )
+
+        # calculate 1st and 2nd eval and evec of hessian
+        calc_ev(
+            architecture = model,
+            data = data,
+            data_root = '/u/home/remersch/DPBenchmark/data',
+            train_bs = 128,
             max_train_samples = 4096,
             max_iter = 100,
             cuda = cuda,

@@ -8,6 +8,6 @@ Most important files include:
 * `Hessian_Tutorial.ipynb` - this is an adapted version of the example notebook of PyHessian which we use to calculate smoothness caracteristics (hessian traces, etc.)
 
 # Results
-This is a list of the most important experiments (for the most up-to-date see paper on arxiv). 
+This is a list of the most important experiments (for the most up-to-date see paper on arxiv ["SmoothNets: Optimizing CNN architecture design for differentially private deep learning"](https://arxiv.org/abs/2205.04095)). 
 <br><br>
 **WILL BE DONE SOON**.

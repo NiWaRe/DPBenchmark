@@ -6,7 +6,7 @@ Three important files:
 * `lean/data.py` - for now adapted model classes for CIFAR10, ImageNette.
 * `lean/models.py` - custom models, and model generators. 
 * `lean/utils.py` - custom utility functions. 
-* `config.yaml` - to select the models, data, optimization, DP params.
+* `lean/config.yaml` - to select the models, data, optimization, DP params.
 
 # Installation 
 1. Create conda env with `conda env create -f setup/environment-yaml`

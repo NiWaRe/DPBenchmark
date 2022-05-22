@@ -26,3 +26,7 @@ Three important files:
 
 # Experiments 
 See under `/experiments` to see more information and also the most important values of the experiments.
+
+# SmoothNet
+See a clean and more optimized version of the SmoothNets v1 in the [TUM-AIMED/PrivateModelArchitectures](https://github.com/TUM-AIMED/PrivateModelArchitectures) repo under [SmoothNet](https://github.com/TUM-AIMED/PrivateModelArchitectures/blob/master/PrivateModelArchitectures/Classification/SmoothNet.py).
+

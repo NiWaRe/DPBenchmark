@@ -1,8 +1,8 @@
 ###########
 # General #
 ###########
-project_name: "dp_benchmark"
-experiment_name: "very_low_eps_test" # leave blank for sweep
+project_name: "dp_benchmark" # baseline for no-DP experiments
+experiment_name: "" # leave blank for sweep
 including_test: true
 max_epochs: 90
 device: 'cuda:0'
@@ -19,7 +19,7 @@ print_every_iter: 50 # for training (validation after every epoch)
   # simple_conv, stage_conv, en_scaling_base_model, en_scaling_residual_model, 
   # googlenet, xception, efficientnet_b[0-7]
   # any other model is tried to be created from the timm library
-model_name: 'en_scaling_residual_model'
+model_name: 'resnet9'
 pretrained: False
 weight_init: True # xavier_uniform (set correct activation function in utils.py)
 weight_norm: False
@@ -55,9 +55,9 @@ dense: True
 # Data #
 ######## 
 data_name: 'imagenette' # or cifar10
-data_root: '/u/home/remersch/alpaca_code/DPBenchmark/data'
+data_root: '/u/home/remersch/DPBenchmark/data'
 batch_size: 256
-physical_batch_size: 32
+physical_batch_size: 64
 num_classes: 10
 val_split: 0.2
 
@@ -81,3 +81,28 @@ L2_clip: 0.1
 target_epsilon: 7.0
 target_delta: 0.00001
 abort: true
+
+#######################
+# experimental params #
+#######################
+
+### study trainings (short) ###
+# sweep: sweeps/dp_params_sweep_study.yaml 
+# lr: 0.1 if config.dp else 0.05
+# lr-scheduler: step_size=1 if config.dp else 10, gamma=0.7,
+# SGD without momentum and weight-decay
+# batch-size: 128 if config.dp else 32
+# weight-init: false
+# patience on val-loss: 15
+# divergence threshold on val-loss: 1000
+
+### benchmark trainings (long) ###
+# sweep: sweeps/dp_params_sweep_study.yaml
+# lr: 2e-3 if config.dp else 0.05
+# lr-scheduler: step_size=5 if config.dp else 10, gamma=0.9 if config.dp else 0.7
+# SGD momentum: 0.9, weight-decay: 2e-4
+# batch-size: 256 if config.dp else 32
+# weight-init: xavier-glorot (relu or selu gain) if config.dp else false
+# patience on val-loss: 30 if config.dp else 15
+# divergence threshold on val-loss: 1000
+# NOTE: no-DP case uses same params as for the study

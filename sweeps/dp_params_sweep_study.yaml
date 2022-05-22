@@ -1,0 +1,53 @@
+project: dp_benchmark
+method: bayes
+metric:
+  goal: minimize
+  name: val_loss
+parameters:
+  L2_clip:
+    distribution: uniform
+    # priors from Depth ConvNet General Sweep
+    max: 10.0
+    min: 0.01
+  # model.noise_multiplier:
+  #   distribution: uniform
+  #   # typical range according to opacus: https://opacus.ai/docs/faq: [2.0, 0.1] 
+  #   # priors from Depth ConvNet General Sweep [0.5864, 1.742]
+  #   max: 3.0 
+  #   min: 0.04 
+  # model.depth: 
+  #   distribution: int_uniform
+  #   max: 7
+  #   min: 1
+  # model.virtual_batch_size:
+    # distribution: int_uniform
+    # max: 128
+    # min: 16
+    # distribution: categorical
+    # values: 
+    # - 16
+    # - 32
+    # - 64
+    # - 128
+  # NOTE: more options could be added for final searches
+  max_epochs:
+    distribution: categorical
+    values: 
+    - 15
+    - 30
+  # model.target_delta:
+  #   distribution: uniform
+  #   max: 2e-05
+  #   min: 5e-06
+  # model.target_epsilon:
+  #   distribution: uniform
+  #   max: 100
+  #   min: 10
+program: trainer_lean.py
+# command:
+#   - ${env}
+#   - ${interpreter}
+#   - ${program}
+#   - "--config"
+#   - "configs_sweep.yaml"
+#   - ${args}

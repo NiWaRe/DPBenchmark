@@ -1,5 +1,5 @@
 # SmoothNet
-See a clean and more optimized version of the SmoothNets v1 in the [TUM-AIMED/PrivateModelArchitectures](https://github.com/TUM-AIMED/PrivateModelArchitectures) repo under [SmoothNet](https://github.com/TUM-AIMED/PrivateModelArchitectures/blob/master/PrivateModelArchitectures/Classification/SmoothNet.py).
+This is the codebase for the paper [SmoothNets: Optimizing CNN architecture design for differentially private deep learning](https://arxiv.org/abs/2205.04095) which was accepted at the TPDP Workshop at ICML 2022. See a clean and more optimized version of the SmoothNets v1 in the [TUM-AIMED/PrivateModelArchitectures](https://github.com/TUM-AIMED/PrivateModelArchitectures) repo under [SmoothNet](https://github.com/TUM-AIMED/PrivateModelArchitectures/blob/master/PrivateModelArchitectures/Classification/SmoothNet.py).
 
 # Experiments 
 ![Validation Accuracy on CIFAR10 with and without DP](valacc_cifar10_w_o_DP.png "Validation Accuracy on CIFAR10 with and without DP")
@@ -7,8 +7,8 @@ In total, we **evaluated over 100 different model architectures in more than 600
 * Following multiple requests, see all the results of the study with all detailed parameters and performance values in the [results section and the appendix of my thesis](https://drive.google.com/drive/folders/1aqgswca16C5CRg0rjk3tIT7NW5M_Dw1k?usp=sharing).
 * See under `/experiments` for more information about the experiments.
 
-# DPBenchmark 
-This is the WIP codebase of the ongoing research project on the benchmarking of different popular machine learning design choices in differentially private learning systems. This work mainly focuses on Image Classification and Segmentation on standard image datasets and medical datasets. Main tools used are Opacus, PyTorch Lightning and Weights&Biases.
+# DPBenchmark Codebase
+This is the codebase of the ongoing research project on the benchmarking of different popular machine learning design choices in differentially private learning systems. This work mainly focuses on Image Classification and Segmentation on standard image datasets and medical datasets. Main tools used are Opacus, PyTorch Lightning and Weights&Biases.
 
 Three important files: 
 * `trainer_lean.py` - the main training file parsing the configurations, communicating with wandb if wanted, using opacus if wanted. In the `old_opacus_codebase` branch an earlier implementation based on a earlier version of opacus (and deepee) was well as integration with PyTorch Lightning can be found. 

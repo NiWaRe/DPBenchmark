@@ -2,6 +2,7 @@
 See a clean and more optimized version of the SmoothNets v1 in the [TUM-AIMED/PrivateModelArchitectures](https://github.com/TUM-AIMED/PrivateModelArchitectures) repo under [SmoothNet](https://github.com/TUM-AIMED/PrivateModelArchitectures/blob/master/PrivateModelArchitectures/Classification/SmoothNet.py).
 
 # Experiments 
+![Validation Accuracy on CIFAR10 with and without DP](valacc_cifar10_w_o_DP.png "Validation Accuracy on CIFAR10 with and without DP")
 In total, we **evaluated over 100 different model architectures in more than 6000 experiments on CIFAR-10 and ImageNette** based on (a) handcrafted models, intended to inspect the effect of isolated model components and (b) on established (SOTA) models to guarantee representative results.
 * Following multiple requests, see all the results of the study with all detailed parameters and performance values in the [results section and the appendix of my thesis](https://drive.google.com/drive/folders/1aqgswca16C5CRg0rjk3tIT7NW5M_Dw1k?usp=sharing).
 * See under `/experiments` for more information about the experiments.
